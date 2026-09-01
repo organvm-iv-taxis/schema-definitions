@@ -306,9 +306,47 @@ def test_duplicate_evidence_ids_fail_in_every_verification_state():
         assert any(expected in error for error in semantic_errors(candidate)), state
 
 
+def test_malformed_evidence_ids_do_not_abort_validation_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    malformed = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    malformed["verification_state"] = "unverified"
+    malformed["evidence_references"][0]["evidence_id"] = {"bad": "id"}
+    schema_errors, semantic_error_list = validate_document(malformed)
+    assert any("evidence_id" in error for error in schema_errors)
+    assert isinstance(semantic_error_list, list)
+
+    malformed_path = tmp_path / "malformed-evidence-id.json"
+    valid_path = tmp_path / "valid.json"
+    malformed_path.write_text(json.dumps(malformed))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_governance_memory.py",
+            str(malformed_path),
+            str(valid_path),
+        ],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {malformed_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
 def test_assertion_fact_is_a_bounded_machine_readable_predicate_value():
     data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
-    data["fact"] = {"predicate": "deployment_status", "value": "public"}
+    data["fact"] = {
+        "predicate": "industry_status",
+        "subject": "Education",
+        "value": "deployed",
+    }
 
     assert validate_document(data) == ([], [])
 
@@ -354,6 +392,37 @@ def test_assertion_freshness_accepts_lowercase_utc_suffix():
         data,
         now=datetime(2026, 8, 31, 13, 0, tzinfo=UTC),
     ) == []
+
+
+def test_assertion_freshness_rejects_utc_normalization_overflow_without_aborting(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    boundary = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    boundary["freshness"] = {
+        "verified_at": "0001-01-01T00:00:00+23:59",
+        "status": "not_applicable",
+    }
+    _schema_errors, semantic_error_list = validate_document(boundary)
+    assert any("ISO 8601 date-time" in error for error in semantic_error_list)
+
+    boundary_path = tmp_path / "boundary-timestamp.json"
+    valid_path = tmp_path / "valid.json"
+    boundary_path.write_text(json.dumps(boundary))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_governance_memory.py", str(boundary_path), str(valid_path)],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {boundary_path}" in captured
+    assert f"PASS {valid_path}" in captured
 
 
 def test_assertion_freshness_rejects_unbounded_ages_without_aborting_batch(

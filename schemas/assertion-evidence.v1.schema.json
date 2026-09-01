@@ -26,6 +26,11 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
         },
+        "subject": {
+          "description": "Optional stable or human-readable subject that disambiguates which entity the predicate describes.",
+          "type": "string",
+          "minLength": 1
+        },
         "value": {"type": ["string", "number", "boolean", "null"]}
       },
       "additionalProperties": false

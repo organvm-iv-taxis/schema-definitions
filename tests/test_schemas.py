@@ -171,11 +171,16 @@ class TestProjectRecordSchema:
             "https://example.test/%ZZ",
             "https://example.test/%0",
             "https://exa|mple.test/artifact",
+            "https://user@@example.test/artifact",
         ):
             assert validate(value, schema), value
 
         assert validate(
             "https://example.test/%7Eartifact?separator=%20",
+            schema,
+        ) == []
+        assert validate(
+            "https://user%40domain@example.test/artifact",
             schema,
         ) == []
 

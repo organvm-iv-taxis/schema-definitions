@@ -75,7 +75,7 @@
       ]
     },
     "deployment_status": {
-      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified deployment assertion whose machine-readable deployment_status fact matches this value and whose project-record posture is implemented or partial. A retired state requires a matching verified fact about either the historical deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
+      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified, non-expired current_state deployment assertion whose machine-readable deployment_status fact matches this value and whose project-record posture is implemented or partial. A retired state permits matching historical evidence about either the former deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
       "type": "string",
       "enum": ["not-deployed", "internal", "pilot", "public", "retired", "not-applicable"]
     },
@@ -135,6 +135,7 @@
     },
     "industries": {
       "type": "array",
+      "description": "Industry-specific delivery states. The integrity runtime requires every deployed or piloted industry to cite a verified, fresh current_state deployment/adoption claim whose industry_status fact names that industry and matches its status.",
       "items": {"$ref": "#/$defs/industry"},
       "default": []
     },
@@ -288,6 +289,7 @@
         "path": {"type": "string", "pattern": "^docs/industries/[a-z0-9-]+\\.md$"},
         "claim_references": {
           "type": "array",
+          "description": "Top-level claim IDs. For deployed or piloted industries, at least one must resolve to relevant, verified current-state evidence for this industry's exact status.",
           "uniqueItems": true,
           "items": {"$ref": "#/$defs/slug"}
         }
@@ -385,7 +387,7 @@
       }
     },
     {
-      "description": "Pilot and public lifecycle states need a bounded claim that says the deployment is implemented or partial. Assertion verification and exact deployment_status fact binding are enforced by the integrity runtime.",
+      "description": "Pilot and public lifecycle states need a bounded claim that says the deployment is implemented or partial. Fresh current_state verification and exact deployment_status fact binding are enforced by the integrity runtime.",
       "if": {
         "required": ["deployment_status"],
         "properties": {

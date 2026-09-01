@@ -84,11 +84,26 @@ def load_json(path: Path) -> Any:
 
 
 def _duplicates(values: list[Any]) -> list[Any]:
-    """Return sorted, non-null duplicate values."""
+    """Return deterministic duplicates without hashing malformed JSON values."""
+    hashable_values: list[Any] = []
+    for value in values:
+        if value is None:
+            continue
+        try:
+            hash(value)
+        except TypeError:
+            # Schema validation already reports arrays and objects where scalar
+            # identifiers are required. Semantic validation must still remain
+            # total so one malformed document cannot abort a validation batch.
+            continue
+        hashable_values.append(value)
     return sorted(
-        value
-        for value, count in Counter(values).items()
-        if value is not None and count > 1
+        (
+            value
+            for value, count in Counter(hashable_values).items()
+            if count > 1
+        ),
+        key=lambda value: (type(value).__name__, repr(value)),
     )
 
 
@@ -638,10 +653,10 @@ def _assertion_errors(
                     else verified_at
                 )
                 candidate = datetime.fromisoformat(normalized_verified_at)
-            except ValueError:
-                candidate = None
-            if candidate is not None and candidate.tzinfo is not None:
-                parsed_verified_at = candidate.astimezone(UTC)
+                if candidate.tzinfo is not None:
+                    parsed_verified_at = candidate.astimezone(UTC)
+            except (OverflowError, ValueError):
+                parsed_verified_at = None
         if parsed_verified_at is None:
             errors.append(
                 "freshness.verified_at must be an ISO 8601 date-time with a timezone"

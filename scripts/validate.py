@@ -274,18 +274,25 @@ def _validate_local_file(
         errors.append(f"  {label} does not exist or escapes root: {reference}")
 
 
-def _verified_deployment_fact_matches(
+def _verified_fact_matches(
     assertion: Mapping[str, object] | None,
-    deployment_status: str,
+    *,
+    predicate: str,
+    value: str,
+    subject: str | None = None,
+    require_current_state: bool = False,
 ) -> bool:
-    """Return whether verified evidence asserts this exact deployment state."""
+    """Return whether verified evidence asserts one exact machine fact."""
     if assertion is None or assertion.get("verification_state") != "verified":
+        return False
+    if require_current_state and assertion.get("assertion_class") != "current_state":
         return False
     fact = assertion.get("fact")
     return (
         isinstance(fact, Mapping)
-        and fact.get("predicate") == "deployment_status"
-        and fact.get("value") == deployment_status
+        and fact.get("predicate") == predicate
+        and fact.get("value") == value
+        and (subject is None or fact.get("subject") == subject)
     )
 
 
@@ -346,6 +353,13 @@ def project_record_semantic_errors(
     if not isinstance(industries, list):
         industries = []
     claim_id_counts = Counter(claim_ids)
+    claim_indexes_by_id = {
+        claim["id"]: index
+        for index, claim in enumerate(claims)
+        if isinstance(claim, dict)
+        and isinstance(claim.get("id"), str)
+        and claim_id_counts[claim["id"]] == 1
+    }
     for industry_index, industry in enumerate(industries):
         if not isinstance(industry, dict):
             continue
@@ -449,7 +463,7 @@ def project_record_semantic_errors(
                 label=f"claim_references[{index}]",
             )
             errors.extend(assertion_errors)
-            if assertion is not None:
+            if assertion is not None and not assertion_errors:
                 resolved_assertions[index] = assertion
 
         limitations = data.get("limitations")
@@ -468,6 +482,52 @@ def project_record_semantic_errors(
                     label=f"limitations[{index}]",
                 )
                 errors.extend(assertion_errors)
+
+    for industry_index, industry in enumerate(industries):
+        if not isinstance(industry, dict):
+            continue
+        industry_status = industry.get("status")
+        if industry_status not in {"deployed", "piloted"}:
+            continue
+        industry_name = industry.get("name")
+        industry_claims = industry.get("claim_references")
+        if not isinstance(industry_name, str) or not isinstance(industry_claims, list):
+            continue
+        if root is None:
+            errors.append(
+                f"  industries[{industry_index}] status {industry_status!r} "
+                "requires repository_root to verify relevant assertion evidence"
+            )
+            continue
+        qualifying_industry_claim = False
+        for reference in industry_claims:
+            if not isinstance(reference, str):
+                continue
+            claim_index = claim_indexes_by_id.get(reference)
+            if claim_index is None:
+                continue
+            claim = claims[claim_index]
+            if not isinstance(claim, dict):
+                continue
+            if claim.get("scope") not in {"deployment", "adoption"}:
+                continue
+            if claim.get("claim_posture") not in {"implemented", "partial"}:
+                continue
+            if _verified_fact_matches(
+                resolved_assertions.get(claim_index),
+                predicate="industry_status",
+                subject=industry_name,
+                value=industry_status,
+                require_current_state=True,
+            ):
+                qualifying_industry_claim = True
+                break
+        if not qualifying_industry_claim:
+            errors.append(
+                f"  industries[{industry_index}] status {industry_status!r} requires "
+                "an implemented or partial deployment/adoption claim backed by a "
+                "verified fresh current_state industry_status fact for that industry"
+            )
 
     deployment_status = data.get("deployment_status")
     allowed_postures = (
@@ -489,17 +549,26 @@ def project_record_semantic_errors(
                 "to verify assertion evidence"
             )
         elif not any(
-            _verified_deployment_fact_matches(
+            _verified_fact_matches(
                 resolved_assertions.get(index),
-                deployment_status,
+                predicate="deployment_status",
+                value=deployment_status,
+                require_current_state=deployment_status in {"pilot", "public"},
             )
             for index in qualifying
         ):
-            errors.append(
-                f"  deployment_status {deployment_status!r} requires at least one "
-                "qualifying deployment claim that resolves to a verified assertion "
-                "whose fact predicate/value exactly matches deployment_status"
-            )
+            if deployment_status in {"pilot", "public"}:
+                errors.append(
+                    f"  deployment_status {deployment_status!r} requires at least one "
+                    "qualifying deployment claim backed by a verified fresh "
+                    "current_state assertion whose fact exactly matches deployment_status"
+                )
+            else:
+                errors.append(
+                    f"  deployment_status {deployment_status!r} requires at least one "
+                    "qualifying deployment claim that resolves to a verified assertion "
+                    "whose fact exactly matches deployment_status"
+                )
     return errors
 
 

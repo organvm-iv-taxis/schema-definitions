@@ -12,6 +12,7 @@ FORMAT_CHECKER = FormatChecker()
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 _INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 _AUTHORITY = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%\[\]-]*$")
+_USERINFO = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:%-]*$")
 _PATH = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%/\-]*$")
 _QUERY_OR_FRAGMENT = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%/?\-]*$")
 _RFC3339_DATE_TIME = re.compile(
@@ -51,6 +52,12 @@ def is_uri(value: object) -> bool:
         or _QUERY_OR_FRAGMENT.fullmatch(parsed.fragment) is None
     ):
         return False
+    if parsed.netloc.count("@") > 1:
+        return False
+    if "@" in parsed.netloc:
+        userinfo, _authority = parsed.netloc.split("@", 1)
+        if _USERINFO.fullmatch(userinfo) is None:
+            return False
     if parsed.scheme in {"http", "https"}:
         try:
             _ = parsed.port

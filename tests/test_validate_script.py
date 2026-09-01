@@ -4,6 +4,7 @@ import hashlib
 import json
 import shutil
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -187,6 +188,101 @@ def test_project_record_semantics_resolve_industry_claim_ids(tmp_path):
     )
 
 
+def test_deployed_industry_requires_relevant_substantiated_evidence(tmp_path):
+    repository_root = tmp_path / "repository"
+    shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["industries"] = [
+        {
+            "name": "Education",
+            "status": "deployed",
+            "claim_references": ["authorship-boundary"],
+        }
+    ]
+    target = tmp_path / "project-record-deployed-industry.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("current_state industry_status fact" in error for error in errors)
+
+    owner_reference = "docs/evidence/sources/education-owner.txt"
+    owner_bytes = b"The owner reports the Education deployment.\n"
+    (repository_root / owner_reference).write_bytes(owner_bytes)
+    verifier_reference = "docs/evidence/sources/education-verifier.txt"
+    verifier_bytes = b"The verifier confirms the Education deployment.\n"
+    (repository_root / verifier_reference).write_bytes(verifier_bytes)
+    assertion_reference = "docs/evidence/claims/education-deployment.json"
+    assertion_path = repository_root / assertion_reference
+    assertion = {
+        "contract_name": "assertion-evidence.v1",
+        "contract_version": 1,
+        "assertion_id": "project_record_fixture_education_deployment",
+        "assertion_class": "current_state",
+        "statement": "The project is deployed for the Education industry.",
+        "fact": {
+            "predicate": "industry_status",
+            "subject": "Education",
+            "value": "deployed",
+        },
+        "verification_state": "verified",
+        "freshness": {
+            "verified_at": datetime.now(UTC).isoformat(),
+            "max_age_seconds": 3600,
+            "status": "fresh",
+        },
+        "evidence_references": [
+            {
+                "evidence_id": "project_record_fixture_education_owner",
+                "independence_group": "project-record-fixture-education-owner",
+                "evidence_type": "owner_record",
+                "reference": owner_reference,
+                "body_hash": "sha256:" + hashlib.sha256(owner_bytes).hexdigest(),
+            },
+            {
+                "evidence_id": "project_record_fixture_education_verifier",
+                "independence_group": "project-record-fixture-education-verifier",
+                "evidence_type": "fresh_verifier_receipt",
+                "reference": verifier_reference,
+                "body_hash": "sha256:" + hashlib.sha256(verifier_bytes).hexdigest(),
+            },
+        ],
+    }
+    assertion_path.write_text(json.dumps(assertion))
+    baseline["claim_references"].append(
+        {
+            "id": "education-deployment",
+            "assertion_contract": "assertion-evidence.v1",
+            "assertion_id": assertion["assertion_id"],
+            "assertion_ref": assertion_reference,
+            "scope": "adoption",
+            "claim_posture": "implemented",
+        }
+    )
+    baseline["industries"][0]["claim_references"] = ["education-deployment"]
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is True
+    assert errors == []
+
+    wrong_subject = json.loads(json.dumps(assertion))
+    wrong_subject["fact"]["subject"] = "Healthcare"
+    assertion_path.write_text(json.dumps(wrong_subject))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("current_state industry_status fact" in error for error in errors)
+
+
 def test_strict_project_record_checks_industry_paths(tmp_path):
     repository_root = tmp_path / "repository"
     shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
@@ -234,28 +330,42 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
     baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
     deployment_claim = json.loads(json.dumps(baseline["claim_references"][0]))
-    evidence_reference = "docs/evidence/sources/deployment-public.txt"
-    evidence_bytes = b"The fixture deployment status is public.\n"
-    evidence_path = repository_root / evidence_reference
-    evidence_path.write_bytes(evidence_bytes)
+    owner_reference = "docs/evidence/sources/deployment-public-owner.txt"
+    owner_bytes = b"The owner records the fixture deployment as public.\n"
+    (repository_root / owner_reference).write_bytes(owner_bytes)
+    verifier_reference = "docs/evidence/sources/deployment-public-verifier.txt"
+    verifier_bytes = b"The verifier confirms the fixture deployment is public.\n"
+    (repository_root / verifier_reference).write_bytes(verifier_bytes)
     assertion_reference = "docs/evidence/claims/deployment-public.json"
     assertion_path = repository_root / assertion_reference
     assertion = {
         "contract_name": "assertion-evidence.v1",
         "contract_version": 1,
         "assertion_id": "project_record_fixture_deployment_public",
-        "assertion_class": "historical_record",
+        "assertion_class": "current_state",
         "statement": "At fixture generation, the project deployment was public.",
         "fact": {"predicate": "deployment_status", "value": "public"},
         "verification_state": "verified",
+        "freshness": {
+            "verified_at": datetime.now(UTC).isoformat(),
+            "max_age_seconds": 3600,
+            "status": "fresh",
+        },
         "evidence_references": [
             {
-                "evidence_id": "project_record_fixture_deployment_public_record",
-                "independence_group": "project-record-fixture",
-                "evidence_type": "artifact",
-                "reference": evidence_reference,
-                "body_hash": "sha256:" + hashlib.sha256(evidence_bytes).hexdigest(),
-            }
+                "evidence_id": "project_record_fixture_deployment_public_owner",
+                "independence_group": "project-record-fixture-owner",
+                "evidence_type": "owner_record",
+                "reference": owner_reference,
+                "body_hash": "sha256:" + hashlib.sha256(owner_bytes).hexdigest(),
+            },
+            {
+                "evidence_id": "project_record_fixture_deployment_public_verifier",
+                "independence_group": "project-record-fixture-verifier",
+                "evidence_type": "fresh_verifier_receipt",
+                "reference": verifier_reference,
+                "body_hash": "sha256:" + hashlib.sha256(verifier_bytes).hexdigest(),
+            },
         ],
     }
     assertion_path.write_text(json.dumps(assertion))
@@ -288,8 +398,35 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
         repository_root=repository_root,
     )
     assert ok is False
-    assert any("fact predicate/value exactly matches" in error for error in errors)
+    assert any("fact exactly matches deployment_status" in error for error in errors)
     assertion_path.write_text(json.dumps(assertion))
+
+    historical = json.loads(json.dumps(assertion))
+    historical["assertion_class"] = "historical_record"
+    del historical["freshness"]
+    assertion_path.write_text(json.dumps(historical))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("verified fresh current_state" in error for error in errors)
+
+    retired_record = json.loads(json.dumps(historical))
+    retired_record["fact"]["value"] = "retired"
+    assertion_path.write_text(json.dumps(retired_record))
+    retired = json.loads(json.dumps(baseline))
+    retired["deployment_status"] = "retired"
+    retired["claim_references"][-1]["claim_posture"] = "contradicted"
+    target.write_text(json.dumps(retired))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is True
+    assert errors == []
+    assertion_path.write_text(json.dumps(assertion))
+    target.write_text(json.dumps(baseline))
 
     missing = json.loads(json.dumps(baseline))
     missing["claim_references"][-1]["assertion_ref"] = (
@@ -302,7 +439,7 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     )
     assert ok is False
     assert any("assertion path does not exist" in error for error in errors)
-    assert any("resolves to a verified assertion" in error for error in errors)
+    assert any("verified fresh current_state" in error for error in errors)
 
     assertion["verification_state"] = "unverified"
     assertion_path.write_text(json.dumps(assertion))
@@ -312,7 +449,7 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
         repository_root=repository_root,
     )
     assert ok is False
-    assert any("resolves to a verified assertion" in error for error in errors)
+    assert any("verified fresh current_state" in error for error in errors)
 
     assertion["verification_state"] = "verified"
     assertion["assertion_id"] = "different-assertion"
