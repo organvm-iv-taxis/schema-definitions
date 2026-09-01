@@ -284,6 +284,7 @@ def _verified_fact_matches(
     predicate: str,
     value: str,
     subject: str | None = None,
+    project_repository: str | None = None,
     require_current_state: bool = False,
 ) -> bool:
     """Return whether verified evidence asserts one exact machine fact."""
@@ -297,6 +298,10 @@ def _verified_fact_matches(
         and fact.get("predicate") == predicate
         and fact.get("value") == value
         and (subject is None or fact.get("subject") == subject)
+        and (
+            project_repository is None
+            or fact.get("project_repository") == project_repository
+        )
     )
 
 
@@ -404,10 +409,10 @@ def project_record_semantic_errors(
                 "  links.repository must resolve to canonical_repository for a "
                 "canonical repository role"
             )
-    class_d_delivery = documentation_class == "D" or repository_role in {
-        "mirror",
-        "deployment-artifact",
-    }
+    class_d_delivery = documentation_class == "D" or (
+        isinstance(repository_role, str)
+        and repository_role in {"mirror", "deployment-artifact"}
+    )
     if class_d_delivery:
         redirect = data.get("redirect")
         target = redirect.get("target") if isinstance(redirect, dict) else None
@@ -513,7 +518,10 @@ def project_record_semantic_errors(
         if not isinstance(industry, dict):
             continue
         industry_status = industry.get("status")
-        if industry_status not in {"deployed", "piloted"}:
+        if not isinstance(industry_status, str) or industry_status not in {
+            "deployed",
+            "piloted",
+        }:
             continue
         industry_name = industry.get("name")
         industry_claims = industry.get("claim_references")
@@ -535,14 +543,27 @@ def project_record_semantic_errors(
             claim = claims[claim_index]
             if not isinstance(claim, dict):
                 continue
-            if claim.get("scope") not in {"deployment", "adoption"}:
+            claim_scope = claim.get("scope")
+            if not isinstance(claim_scope, str) or claim_scope not in {
+                "deployment",
+                "adoption",
+            }:
                 continue
-            if claim.get("claim_posture") not in {"implemented", "partial"}:
+            claim_posture = claim.get("claim_posture")
+            if not isinstance(claim_posture, str) or claim_posture not in {
+                "implemented",
+                "partial",
+            }:
                 continue
             if _verified_fact_matches(
                 resolved_assertions.get(claim_index),
                 predicate="industry_status",
                 subject=industry_name,
+                project_repository=(
+                    canonical_repository
+                    if isinstance(canonical_repository, str)
+                    else ""
+                ),
                 value=industry_status,
                 require_current_state=True,
             ):
@@ -562,6 +583,7 @@ def project_record_semantic_errors(
             for index, claim in enumerate(claims)
             if isinstance(claim, dict)
             and claim.get("scope") == "status"
+            and isinstance(claim.get("claim_posture"), str)
             and claim.get("claim_posture") in {"implemented", "partial"}
         ]
         if root is None:
@@ -597,6 +619,7 @@ def project_record_semantic_errors(
             for index, claim in enumerate(claims)
             if isinstance(claim, dict)
             and claim.get("scope") == "deployment"
+            and isinstance(claim.get("claim_posture"), str)
             and claim.get("claim_posture") in allowed_postures
         ]
         if root is None:

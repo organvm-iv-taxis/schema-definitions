@@ -135,7 +135,7 @@
     },
     "industries": {
       "type": "array",
-      "description": "Industry-specific delivery states. Names are semantic identities and must be unique. The integrity runtime requires every deployed or piloted industry to cite a verified, fresh current_state deployment/adoption claim whose industry_status fact names that industry and matches its status.",
+      "description": "Industry-specific delivery states. Names are semantic identities and must be unique. The integrity runtime requires every deployed or piloted industry to cite a verified, fresh current_state deployment/adoption claim whose industry_status fact names that industry, binds project_repository to canonical_repository, and matches its status.",
       "items": {"$ref": "#/$defs/industry"},
       "default": []
     },
@@ -290,7 +290,7 @@
         "path": {"type": "string", "pattern": "^docs/industries/[a-z0-9-]+\\.md$"},
         "claim_references": {
           "type": "array",
-          "description": "Top-level claim IDs. For deployed or piloted industries, at least one must resolve to relevant, verified current-state evidence for this industry's exact status.",
+          "description": "Top-level claim IDs. For deployed or piloted industries, at least one must resolve to relevant, verified current-state evidence for this canonical project's exact industry and status.",
           "uniqueItems": true,
           "items": {"$ref": "#/$defs/slug"}
         }

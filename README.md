@@ -59,7 +59,8 @@ lifecycle states.
 Likewise, every `deployed` or `piloted` industry resolves at least one cited
 deployment or adoption claim to verified, fresh `current_state` evidence. Its
 machine-readable fact uses `industry_status`, names the industry in
-`fact.subject`, and exactly matches the declared industry status.
+`fact.subject`, binds `fact.project_repository` to `canonical_repository`, and
+exactly matches the declared industry status.
 
 Class D records are noncanonical delivery surfaces and therefore use either the
 `deployment-artifact` or `mirror` repository role. Their

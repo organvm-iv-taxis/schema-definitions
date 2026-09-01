@@ -248,6 +248,7 @@ def test_deployed_industry_requires_relevant_substantiated_evidence(tmp_path):
         "fact": {
             "predicate": "industry_status",
             "subject": "Education",
+            "project_repository": baseline["canonical_repository"],
             "value": "deployed",
         },
         "verification_state": "verified",
@@ -297,6 +298,16 @@ def test_deployed_industry_requires_relevant_substantiated_evidence(tmp_path):
     wrong_subject = json.loads(json.dumps(assertion))
     wrong_subject["fact"]["subject"] = "Healthcare"
     assertion_path.write_text(json.dumps(wrong_subject))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("current_state industry_status fact" in error for error in errors)
+
+    wrong_project = json.loads(json.dumps(assertion))
+    wrong_project["fact"]["project_repository"] = "organvm/different-project"
+    assertion_path.write_text(json.dumps(wrong_project))
     ok, errors = validate_script.validate_file(
         target,
         repository_root=repository_root,
@@ -637,6 +648,79 @@ def test_malformed_project_uri_does_not_abort_later_batch_targets(
     assert exit_code == 1
     assert "FAIL project-record-malformed.json" in captured.out
     assert "is not a 'uri'" in captured.out
+    assert "PASS project-record-valid.json" in captured.out
+
+
+def test_malformed_project_enums_do_not_abort_later_batch_targets(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    candidates = []
+
+    malformed_role = json.loads(json.dumps(baseline))
+    malformed_role["repository_role"] = ["canonical"]
+    candidates.append(malformed_role)
+
+    malformed_industry = json.loads(json.dumps(baseline))
+    malformed_industry["industries"] = [
+        {"name": "Education", "status": {"bad": "status"}}
+    ]
+    candidates.append(malformed_industry)
+
+    malformed_status_posture = json.loads(json.dumps(baseline))
+    malformed_status_posture["claim_references"][0]["claim_posture"] = {
+        "bad": "posture"
+    }
+    candidates.append(malformed_status_posture)
+
+    malformed_industry_scope = json.loads(json.dumps(baseline))
+    malformed_industry_scope["claim_references"][0]["scope"] = ["deployment"]
+    malformed_industry_scope["industries"] = [
+        {
+            "name": "Education",
+            "status": "deployed",
+            "claim_references": ["project-status"],
+        }
+    ]
+    candidates.append(malformed_industry_scope)
+
+    malformed_deployment_posture = json.loads(json.dumps(baseline))
+    deployment_claim = json.loads(
+        json.dumps(malformed_deployment_posture["claim_references"][0])
+    )
+    deployment_claim.update(
+        {
+            "id": "deployment-malformed",
+            "scope": "deployment",
+            "claim_posture": ["implemented"],
+        }
+    )
+    malformed_deployment_posture["deployment_status"] = "public"
+    malformed_deployment_posture["claim_references"].append(deployment_claim)
+    candidates.append(malformed_deployment_posture)
+
+    paths = []
+    for index, candidate in enumerate(candidates):
+        path = tmp_path / f"project-record-malformed-enum-{index}.json"
+        path.write_text(json.dumps(candidate))
+        paths.append(path)
+    valid_path = tmp_path / "project-record-valid.json"
+    valid_path.write_text(json.dumps(baseline))
+
+    exit_code, captured = run_main(
+        monkeypatch,
+        capsys,
+        "--repository-root",
+        PROJECT_RECORD_FIXTURE,
+        *paths,
+        valid_path,
+    )
+
+    assert exit_code == 1
+    for path in paths:
+        assert f"FAIL {path.name}" in captured.out
     assert "PASS project-record-valid.json" in captured.out
 
 

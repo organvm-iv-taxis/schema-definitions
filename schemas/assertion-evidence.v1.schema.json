@@ -31,6 +31,11 @@
           "type": "string",
           "minLength": 1
         },
+        "project_repository": {
+          "description": "Optional canonical owner/name repository identity for facts whose subject alone is not globally unique, such as an industry name.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
         "value": {"type": ["string", "number", "boolean", "null"]}
       },
       "additionalProperties": false
