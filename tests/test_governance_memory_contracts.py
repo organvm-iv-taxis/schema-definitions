@@ -306,6 +306,17 @@ def test_duplicate_evidence_ids_fail_in_every_verification_state():
         assert any(expected in error for error in semantic_errors(candidate)), state
 
 
+def test_assertion_fact_is_a_bounded_machine_readable_predicate_value():
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    data["fact"] = {"predicate": "deployment_status", "value": "public"}
+
+    assert validate_document(data) == ([], [])
+
+    del data["fact"]["value"]
+    schema_errors, _semantic_errors = validate_document(data)
+    assert any("value" in error for error in schema_errors)
+
+
 def test_assertion_freshness_rejects_future_and_expired_receipts():
     baseline = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
     validation_now = datetime(2026, 8, 31, 13, 0, tzinfo=UTC)

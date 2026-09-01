@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 import sys
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -273,6 +274,21 @@ def _validate_local_file(
         errors.append(f"  {label} does not exist or escapes root: {reference}")
 
 
+def _verified_deployment_fact_matches(
+    assertion: Mapping[str, object] | None,
+    deployment_status: str,
+) -> bool:
+    """Return whether verified evidence asserts this exact deployment state."""
+    if assertion is None or assertion.get("verification_state") != "verified":
+        return False
+    fact = assertion.get("fact")
+    return (
+        isinstance(fact, Mapping)
+        and fact.get("predicate") == "deployment_status"
+        and fact.get("value") == deployment_status
+    )
+
+
 def project_record_semantic_errors(
     data: object,
     *,
@@ -325,6 +341,24 @@ def project_record_semantic_errors(
             "  claim_references: duplicate id values: "
             + ", ".join(duplicate_claim_ids)
         )
+
+    industries = data.get("industries")
+    if not isinstance(industries, list):
+        industries = []
+    claim_id_counts = Counter(claim_ids)
+    for industry_index, industry in enumerate(industries):
+        if not isinstance(industry, dict):
+            continue
+        industry_claims = industry.get("claim_references")
+        if not isinstance(industry_claims, list):
+            continue
+        for reference_index, reference in enumerate(industry_claims):
+            if isinstance(reference, str) and claim_id_counts[reference] != 1:
+                errors.append(
+                    f"  industries[{industry_index}].claim_references"
+                    f"[{reference_index}] must resolve to exactly one top-level "
+                    f"claim_reference id: {reference}"
+                )
 
     documentation_class = data.get("documentation_class")
     repository_role = data.get("repository_role")
@@ -380,6 +414,15 @@ def project_record_semantic_errors(
                     errors,
                 )
 
+        for index, industry in enumerate(industries):
+            if isinstance(industry, dict) and "path" in industry:
+                _validate_local_file(
+                    root,
+                    industry.get("path"),
+                    f"industries[{index}].path",
+                    errors,
+                )
+
         links = data.get("links")
         if isinstance(links, dict):
             for key in ("documentation", "evidence"):
@@ -432,7 +475,7 @@ def project_record_semantic_errors(
         if isinstance(deployment_status, str)
         else None
     )
-    if allowed_postures is not None:
+    if allowed_postures is not None and isinstance(deployment_status, str):
         qualifying = [
             index
             for index, claim in enumerate(claims)
@@ -446,12 +489,16 @@ def project_record_semantic_errors(
                 "to verify assertion evidence"
             )
         elif not any(
-            resolved_assertions.get(index, {}).get("verification_state") == "verified"
+            _verified_deployment_fact_matches(
+                resolved_assertions.get(index),
+                deployment_status,
+            )
             for index in qualifying
         ):
             errors.append(
                 f"  deployment_status {deployment_status!r} requires at least one "
-                "qualifying deployment claim that resolves to a verified assertion"
+                "qualifying deployment claim that resolves to a verified assertion "
+                "whose fact predicate/value exactly matches deployment_status"
             )
     return errors
 

@@ -17,6 +17,19 @@
       "enum": ["external_fact", "operator_directive", "current_state", "inference", "historical_record", "ratified_axiom"]
     },
     "statement": {"type": "string", "minLength": 1},
+    "fact": {
+      "description": "Optional machine-readable predicate/value asserted by the human-readable statement. Consumers that make lifecycle or policy decisions must compare this value rather than infer facts from prose.",
+      "type": "object",
+      "required": ["predicate", "value"],
+      "properties": {
+        "predicate": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+        },
+        "value": {"type": ["string", "number", "boolean", "null"]}
+      },
+      "additionalProperties": false
+    },
     "verification_state": {"type": "string", "enum": ["unverified", "verified", "stale", "disputed"]},
     "inference_label": {"type": "string", "minLength": 1},
     "freshness": {

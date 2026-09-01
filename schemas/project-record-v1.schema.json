@@ -75,7 +75,7 @@
       ]
     },
     "deployment_status": {
-      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified deployment assertion whose project-record posture is implemented or partial. A retired state requires verified evidence of either the historical deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
+      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified deployment assertion whose machine-readable deployment_status fact matches this value and whose project-record posture is implemented or partial. A retired state requires a matching verified fact about either the historical deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
       "type": "string",
       "enum": ["not-deployed", "internal", "pilot", "public", "retired", "not-applicable"]
     },
@@ -385,7 +385,7 @@
       }
     },
     {
-      "description": "Pilot and public lifecycle states need a bounded claim that says the deployment is implemented or partial. Assertion verification is enforced by the integrity runtime.",
+      "description": "Pilot and public lifecycle states need a bounded claim that says the deployment is implemented or partial. Assertion verification and exact deployment_status fact binding are enforced by the integrity runtime.",
       "if": {
         "required": ["deployment_status"],
         "properties": {
@@ -408,7 +408,7 @@
       }
     },
     {
-      "description": "A retired lifecycle state needs verified evidence of the historical deployment or its current unavailability. Contradicted is allowed for the latter; proposed and unknown are not sufficient.",
+      "description": "A retired lifecycle state needs a verified assertion whose deployment_status fact is retired and whose evidence establishes the historical deployment or its current unavailability. Contradicted is allowed for the latter; proposed and unknown are not sufficient.",
       "if": {
         "required": ["deployment_status"],
         "properties": {

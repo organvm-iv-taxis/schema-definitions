@@ -10,6 +10,10 @@ from jsonschema import FormatChecker
 
 FORMAT_CHECKER = FormatChecker()
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
+_INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_AUTHORITY = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%\[\]-]*$")
+_PATH = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%/\-]*$")
+_QUERY_OR_FRAGMENT = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%/?\-]*$")
 _RFC3339_DATE_TIME = re.compile(
     r"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
     r"[Tt](?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d"
@@ -22,7 +26,14 @@ def is_uri(value: object) -> bool:
     """Check absolute URI syntax for the contract's machine-readable links."""
     if not isinstance(value, str):
         return True
-    if any(character.isspace() for character in value):
+    if any(
+        character.isspace()
+        or ord(character) < 0x20
+        or ord(character) == 0x7F
+        for character in value
+    ):
+        return False
+    if _INVALID_PERCENT_ESCAPE.search(value):
         return False
     try:
         parsed = urlsplit(value)
@@ -33,8 +44,19 @@ def is_uri(value: object) -> bool:
         return False
     if not parsed.scheme or not _SCHEME.fullmatch(parsed.scheme):
         return False
+    if (
+        _AUTHORITY.fullmatch(parsed.netloc) is None
+        or _PATH.fullmatch(parsed.path) is None
+        or _QUERY_OR_FRAGMENT.fullmatch(parsed.query) is None
+        or _QUERY_OR_FRAGMENT.fullmatch(parsed.fragment) is None
+    ):
+        return False
     if parsed.scheme in {"http", "https"}:
-        return bool(parsed.netloc)
+        try:
+            _ = parsed.port
+        except ValueError:
+            return False
+        return bool(parsed.netloc and parsed.hostname)
     return bool(parsed.netloc or parsed.path)
 
 

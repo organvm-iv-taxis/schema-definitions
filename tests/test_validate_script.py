@@ -1,5 +1,6 @@
 """Tests for the schema validation helper script."""
 
+import hashlib
 import json
 import shutil
 import sys
@@ -164,6 +165,60 @@ def test_project_record_semantics_reject_duplicate_claim_ids(tmp_path):
     assert any("duplicate id values: project-status" in error for error in errors)
 
 
+def test_project_record_semantics_resolve_industry_claim_ids(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["industries"] = [
+        {
+            "name": "Education",
+            "status": "proposed",
+            "claim_references": ["missing-claim"],
+        }
+    ]
+    target = tmp_path / "project-record-industry-claim.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(target)
+
+    assert ok is False
+    assert any(
+        "industries[0].claim_references[0] must resolve to exactly one"
+        in error
+        for error in errors
+    )
+
+
+def test_strict_project_record_checks_industry_paths(tmp_path):
+    repository_root = tmp_path / "repository"
+    shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["industries"] = [
+        {
+            "name": "Education",
+            "status": "proposed",
+            "path": "docs/industries/education.md",
+        }
+    ]
+    target = tmp_path / "project-record-industry-path.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("industries[0].path does not exist" in error for error in errors)
+
+    industry_path = repository_root / "docs/industries/education.md"
+    industry_path.parent.mkdir(parents=True)
+    industry_path.write_text("# Education\n")
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is True
+    assert errors == []
+
+
 def test_strict_project_record_example_binds_nested_fixture_bytes():
     ok, errors = validate_script.validate_file(
         PROJECT_RECORD_EXAMPLE,
@@ -179,9 +234,36 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
     baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
     deployment_claim = json.loads(json.dumps(baseline["claim_references"][0]))
+    evidence_reference = "docs/evidence/sources/deployment-public.txt"
+    evidence_bytes = b"The fixture deployment status is public.\n"
+    evidence_path = repository_root / evidence_reference
+    evidence_path.write_bytes(evidence_bytes)
+    assertion_reference = "docs/evidence/claims/deployment-public.json"
+    assertion_path = repository_root / assertion_reference
+    assertion = {
+        "contract_name": "assertion-evidence.v1",
+        "contract_version": 1,
+        "assertion_id": "project_record_fixture_deployment_public",
+        "assertion_class": "historical_record",
+        "statement": "At fixture generation, the project deployment was public.",
+        "fact": {"predicate": "deployment_status", "value": "public"},
+        "verification_state": "verified",
+        "evidence_references": [
+            {
+                "evidence_id": "project_record_fixture_deployment_public_record",
+                "independence_group": "project-record-fixture",
+                "evidence_type": "artifact",
+                "reference": evidence_reference,
+                "body_hash": "sha256:" + hashlib.sha256(evidence_bytes).hexdigest(),
+            }
+        ],
+    }
+    assertion_path.write_text(json.dumps(assertion))
     deployment_claim.update(
         {
             "id": "deployment-lifecycle",
+            "assertion_id": assertion["assertion_id"],
+            "assertion_ref": assertion_reference,
             "scope": "deployment",
             "claim_posture": "implemented",
         }
@@ -198,6 +280,17 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     assert ok is True
     assert errors == []
 
+    mismatched = json.loads(json.dumps(assertion))
+    mismatched["fact"]["value"] = "not-deployed"
+    assertion_path.write_text(json.dumps(mismatched))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("fact predicate/value exactly matches" in error for error in errors)
+    assertion_path.write_text(json.dumps(assertion))
+
     missing = json.loads(json.dumps(baseline))
     missing["claim_references"][-1]["assertion_ref"] = (
         "docs/evidence/claims/missing.json"
@@ -211,8 +304,6 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     assert any("assertion path does not exist" in error for error in errors)
     assert any("resolves to a verified assertion" in error for error in errors)
 
-    assertion_path = repository_root / "docs/evidence/claims/status.json"
-    assertion = json.loads(assertion_path.read_text())
     assertion["verification_state"] = "unverified"
     assertion_path.write_text(json.dumps(assertion))
     target.write_text(json.dumps(baseline))

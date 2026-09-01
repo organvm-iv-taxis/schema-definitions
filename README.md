@@ -48,10 +48,12 @@ embed a provider catalog or deployment-specific path.
 
 For `project-record.v1`, a `pilot` or `public` deployment state is established
 only by an `implemented` or `partial` deployment claim that resolves to a
-verified assertion. A `retired` state still requires verified evidence, but its
-qualifying claim may also be `contradicted` when the evidence establishes that
-the former deployment is now unavailable. `proposed` and `unknown` claims never
-establish any of those three lifecycle states.
+verified assertion whose machine-readable `fact.predicate` is
+`deployment_status` and whose `fact.value` exactly matches the project record.
+A `retired` state still requires verified evidence, but its qualifying claim may
+also be `contradicted` when the evidence establishes that the former deployment
+is now unavailable. `proposed` and `unknown` claims never establish any of those
+three lifecycle states.
 
 Class D records are noncanonical delivery surfaces and therefore use either the
 `deployment-artifact` or `mirror` repository role. Their

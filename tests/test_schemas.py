@@ -162,6 +162,23 @@ class TestProjectRecordSchema:
         for value in ("custom://registry", "file://registry-host"):
             assert validate(value, schema) == []
 
+    def test_uri_rejects_controls_and_malformed_component_escapes(self):
+        schema = {"type": "string", "format": "uri"}
+
+        for value in (
+            "https://example.test/\x00artifact",
+            "https://example.test/\x1fartifact",
+            "https://example.test/%ZZ",
+            "https://example.test/%0",
+            "https://exa|mple.test/artifact",
+        ):
+            assert validate(value, schema), value
+
+        assert validate(
+            "https://example.test/%7Eartifact?separator=%20",
+            schema,
+        ) == []
+
     def test_timestamps_require_the_documented_rfc3339_subset(self):
         schema = load_schema("project-record-v1.schema.json")
         with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
