@@ -340,6 +340,39 @@ def test_malformed_evidence_ids_do_not_abort_validation_batch(
     assert f"PASS {valid_path}" in captured
 
 
+def test_malformed_independence_groups_do_not_abort_validation_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    malformed = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    malformed["evidence_references"][0]["independence_group"] = {"bad": "group"}
+    schema_errors, semantic_error_list = validate_document(malformed)
+    assert any("independence_group" in error for error in schema_errors)
+    assert isinstance(semantic_error_list, list)
+
+    malformed_path = tmp_path / "malformed-independence-group.json"
+    valid_path = tmp_path / "valid.json"
+    malformed_path.write_text(json.dumps(malformed))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_governance_memory.py",
+            str(malformed_path),
+            str(valid_path),
+        ],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {malformed_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
 def test_assertion_fact_is_a_bounded_machine_readable_predicate_value():
     data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
     data["fact"] = {

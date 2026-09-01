@@ -695,12 +695,17 @@ def _assertion_errors(
         return errors
 
     groups = {
-        item.get("independence_group")
+        group
         for item in evidence
-        if isinstance(item, dict) and item.get("independence_group")
+        if isinstance(item, dict)
+        and isinstance((group := item.get("independence_group")), str)
+        and group
     }
     evidence_types = {
-        item.get("evidence_type") for item in evidence if isinstance(item, dict)
+        evidence_type
+        for item in evidence
+        if isinstance(item, dict)
+        and isinstance((evidence_type := item.get("evidence_type")), str)
     }
     assertion_class = data.get("assertion_class")
 

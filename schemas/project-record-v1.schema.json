@@ -65,7 +65,7 @@
       "items": {"type": "string", "minLength": 2}
     },
     "implementation_status": {
-      "description": "Substantive implementation maturity. Deployment is represented separately by deployment_status.",
+      "description": "Substantive implementation maturity. Deployment is represented separately by deployment_status. The integrity runtime requires an implemented or partial status claim backed by a verified implementation_status fact whose subject is canonical_repository and whose value matches this field.",
       "oneOf": [
         {"const": "ACTIVE", "description": "Maintained substantive implementation; this does not imply deployment."},
         {"const": "PROTOTYPE", "description": "Substantive behavior exists but remains incomplete or unstable."},
@@ -75,7 +75,7 @@
       ]
     },
     "deployment_status": {
-      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified, non-expired current_state deployment assertion whose machine-readable deployment_status fact matches this value and whose project-record posture is implemented or partial. A retired state permits matching historical evidence about either the former deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
+      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified, non-expired current_state deployment assertion whose machine-readable deployment_status fact names canonical_repository as its subject, matches this value, and whose project-record posture is implemented or partial. A retired state permits matching historical evidence about either the former deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
       "type": "string",
       "enum": ["not-deployed", "internal", "pilot", "public", "retired", "not-applicable"]
     },
@@ -135,7 +135,7 @@
     },
     "industries": {
       "type": "array",
-      "description": "Industry-specific delivery states. The integrity runtime requires every deployed or piloted industry to cite a verified, fresh current_state deployment/adoption claim whose industry_status fact names that industry and matches its status.",
+      "description": "Industry-specific delivery states. Names are semantic identities and must be unique. The integrity runtime requires every deployed or piloted industry to cite a verified, fresh current_state deployment/adoption claim whose industry_status fact names that industry and matches its status.",
       "items": {"$ref": "#/$defs/industry"},
       "default": []
     },
@@ -174,7 +174,8 @@
         "repository": {
           "type": "string",
           "format": "uri",
-          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?$"
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?$",
+          "description": "Repository URL. For repository_role canonical, the integrity runtime requires this URL to resolve to canonical_repository."
         },
         "documentation": {"$ref": "#/$defs/local_or_http_ref"},
         "project_page": {"$ref": "#/$defs/http_uri"},

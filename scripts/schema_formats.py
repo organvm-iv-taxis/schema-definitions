@@ -58,11 +58,15 @@ def is_uri(value: object) -> bool:
         userinfo, _authority = parsed.netloc.split("@", 1)
         if _USERINFO.fullmatch(userinfo) is None:
             return False
+    # ``SplitResult.port`` performs the numeric and range checks that
+    # ``urlsplit`` deliberately defers.  Apply them to every URI authority,
+    # not only HTTP(S), so custom schemes cannot smuggle malformed ports into
+    # otherwise valid generic URI fields.
+    try:
+        _ = parsed.port
+    except ValueError:
+        return False
     if parsed.scheme in {"http", "https"}:
-        try:
-            _ = parsed.port
-        except ValueError:
-            return False
         return bool(parsed.netloc and parsed.hostname)
     return bool(parsed.netloc or parsed.path)
 

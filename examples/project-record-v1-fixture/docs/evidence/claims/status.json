@@ -4,6 +4,11 @@
   "assertion_id": "project_record_fixture_status",
   "assertion_class": "historical_record",
   "statement": "At fixture generation, the project record classified the example as a non-deployed prototype.",
+  "fact": {
+    "predicate": "implementation_status",
+    "subject": "organvm/example-project",
+    "value": "PROTOTYPE"
+  },
   "verification_state": "verified",
   "evidence_references": [
     {

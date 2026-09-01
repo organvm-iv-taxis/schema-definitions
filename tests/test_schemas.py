@@ -162,6 +162,15 @@ class TestProjectRecordSchema:
         for value in ("custom://registry", "file://registry-host"):
             assert validate(value, schema) == []
 
+    def test_generic_uri_rejects_malformed_authority_ports(self):
+        schema = {"type": "string", "format": "uri"}
+
+        for value in (
+            "custom://registry:notaport",
+            "custom://registry:99999",
+        ):
+            assert validate(value, schema), value
+
     def test_uri_rejects_controls_and_malformed_component_escapes(self):
         schema = {"type": "string", "format": "uri"}
 

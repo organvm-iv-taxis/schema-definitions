@@ -166,6 +166,28 @@ def test_project_record_semantics_reject_duplicate_claim_ids(tmp_path):
     assert any("duplicate id values: project-status" in error for error in errors)
 
 
+def test_project_record_semantics_reject_duplicate_industry_names(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["industries"] = [
+        {"name": "Education", "status": "proposed"},
+        {
+            "name": "Education",
+            "status": "piloted",
+            "claim_references": ["project-status"],
+        },
+    ]
+    target = tmp_path / "project-record-duplicate-industry.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any("industries: duplicate name values: Education" in error for error in errors)
+
+
 def test_project_record_semantics_resolve_industry_claim_ids(tmp_path):
     baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
     baseline["industries"] = [
@@ -325,6 +347,59 @@ def test_strict_project_record_example_binds_nested_fixture_bytes():
     assert errors == []
 
 
+def test_implementation_status_requires_a_matching_bound_fact(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    target = tmp_path / "project-record-active.json"
+    baseline["implementation_status"] = "ACTIVE"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any("fact matches the canonical project identity" in error for error in errors)
+
+
+def test_canonical_repository_link_must_match_identity(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["links"]["repository"] = "https://github.com/another-owner/project"
+    target = tmp_path / "project-record-wrong-repository-link.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any(
+        "links.repository must resolve to canonical_repository" in error
+        for error in errors
+    )
+
+
+def test_renamed_project_schema_still_runs_project_semantics(tmp_path):
+    renamed_schema = tmp_path / "vendored-contract.json"
+    renamed_schema.write_text(
+        (SCHEMAS_DIR / "project-record-v1.schema.json").read_text()
+    )
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["implementation_status"] = "ACTIVE"
+    target = tmp_path / "record.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        renamed_schema,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any("implementation_status 'ACTIVE' requires" in error for error in errors)
+
+
 def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     repository_root = tmp_path / "repository"
     shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
@@ -344,7 +419,11 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
         "assertion_id": "project_record_fixture_deployment_public",
         "assertion_class": "current_state",
         "statement": "At fixture generation, the project deployment was public.",
-        "fact": {"predicate": "deployment_status", "value": "public"},
+        "fact": {
+            "predicate": "deployment_status",
+            "subject": baseline["canonical_repository"],
+            "value": "public",
+        },
         "verification_state": "verified",
         "freshness": {
             "verified_at": datetime.now(UTC).isoformat(),
@@ -389,6 +468,17 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     )
     assert ok is True
     assert errors == []
+
+    wrong_project = json.loads(json.dumps(assertion))
+    wrong_project["fact"]["subject"] = "organvm/different-project"
+    assertion_path.write_text(json.dumps(wrong_project))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("fact exactly matches deployment_status" in error for error in errors)
+    assertion_path.write_text(json.dumps(assertion))
 
     mismatched = json.loads(json.dumps(assertion))
     mismatched["fact"]["value"] = "not-deployed"
@@ -538,6 +628,8 @@ def test_malformed_project_uri_does_not_abort_later_batch_targets(
     exit_code, captured = run_main(
         monkeypatch,
         capsys,
+        "--repository-root",
+        PROJECT_RECORD_FIXTURE,
         malformed_path,
         valid_path,
     )

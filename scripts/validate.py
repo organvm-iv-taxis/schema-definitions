@@ -44,6 +44,10 @@ SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 PROJECT_RECORD_EXAMPLE = EXAMPLES_DIR / "project-record-v1-example.yaml"
 PROJECT_RECORD_FIXTURE_ROOT = EXAMPLES_DIR / "project-record-v1-fixture"
+PROJECT_RECORD_SCHEMA_ID = (
+    "https://organvm-iv-taxis.github.io/schema-definitions/"
+    "project-record-v1.schema.json"
+)
 _REPOSITORY_SLUG = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _DEPLOYMENT_POSTURES = {
     "pilot": frozenset({"implemented", "partial"}),
@@ -352,6 +356,17 @@ def project_record_semantic_errors(
     industries = data.get("industries")
     if not isinstance(industries, list):
         industries = []
+    industry_names = [
+        industry["name"]
+        for industry in industries
+        if isinstance(industry, dict) and isinstance(industry.get("name"), str)
+    ]
+    duplicate_industry_names = _duplicate_strings(industry_names)
+    if duplicate_industry_names:
+        errors.append(
+            "  industries: duplicate name values: "
+            + ", ".join(duplicate_industry_names)
+        )
     claim_id_counts = Counter(claim_ids)
     claim_indexes_by_id = {
         claim["id"]: index
@@ -377,6 +392,18 @@ def project_record_semantic_errors(
     documentation_class = data.get("documentation_class")
     repository_role = data.get("repository_role")
     canonical_repository = data.get("canonical_repository")
+    links = data.get("links")
+    if repository_role == "canonical" and isinstance(canonical_repository, str):
+        repository_link = links.get("repository") if isinstance(links, dict) else None
+        linked_repository = _github_repository_slug(repository_link)
+        if (
+            linked_repository is None
+            or linked_repository.casefold() != canonical_repository.casefold()
+        ):
+            errors.append(
+                "  links.repository must resolve to canonical_repository for a "
+                "canonical repository role"
+            )
     class_d_delivery = documentation_class == "D" or repository_role in {
         "mirror",
         "deployment-artifact",
@@ -437,7 +464,6 @@ def project_record_semantic_errors(
                     errors,
                 )
 
-        links = data.get("links")
         if isinstance(links, dict):
             for key in ("documentation", "evidence"):
                 reference = links.get(key)
@@ -529,6 +555,36 @@ def project_record_semantic_errors(
                 "verified fresh current_state industry_status fact for that industry"
             )
 
+    implementation_status = data.get("implementation_status")
+    if isinstance(implementation_status, str):
+        qualifying_status_claims = [
+            index
+            for index, claim in enumerate(claims)
+            if isinstance(claim, dict)
+            and claim.get("scope") == "status"
+            and claim.get("claim_posture") in {"implemented", "partial"}
+        ]
+        if root is None:
+            errors.append(
+                f"  implementation_status {implementation_status!r} requires "
+                "repository_root to verify assertion evidence"
+            )
+        elif not isinstance(canonical_repository, str) or not any(
+            _verified_fact_matches(
+                resolved_assertions.get(index),
+                predicate="implementation_status",
+                subject=canonical_repository,
+                value=implementation_status,
+            )
+            for index in qualifying_status_claims
+        ):
+            errors.append(
+                f"  implementation_status {implementation_status!r} requires at "
+                "least one implemented or partial status claim backed by a verified "
+                "assertion whose fact matches the canonical project identity and "
+                "implementation_status"
+            )
+
     deployment_status = data.get("deployment_status")
     allowed_postures = (
         _DEPLOYMENT_POSTURES.get(deployment_status)
@@ -552,6 +608,11 @@ def project_record_semantic_errors(
             _verified_fact_matches(
                 resolved_assertions.get(index),
                 predicate="deployment_status",
+                subject=(
+                    canonical_repository
+                    if isinstance(canonical_repository, str)
+                    else ""
+                ),
                 value=deployment_status,
                 require_current_state=deployment_status in {"pilot", "public"},
             )
@@ -600,7 +661,7 @@ def validate_file(
         path = ".".join(str(p) for p in err.absolute_path) or "(root)"
         messages.append(f"  {path}: {err.message}")
 
-    if schema_path.name == "project-record-v1.schema.json":
+    if schema.get("$id") == PROJECT_RECORD_SCHEMA_ID:
         messages.extend(
             project_record_semantic_errors(
                 data,
