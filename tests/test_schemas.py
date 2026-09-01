@@ -70,6 +70,11 @@ class TestRegistrySchema:
 
 
 class TestProjectRecordSchema:
+    def test_schema_is_valid_draft_2020_12(self):
+        jsonschema.Draft202012Validator.check_schema(
+            load_schema("project-record-v1.schema.json"),
+        )
+
     def test_implementation_status_definitions_are_normative(self):
         schema = load_schema("project-record-v1.schema.json")
         statuses = {
@@ -141,6 +146,21 @@ class TestProjectRecordSchema:
         errors = validate(data, schema)
         assert any("uri" in error for error in errors)
         assert sum("date-time" in error for error in errors) == 2
+
+    def test_timestamps_require_the_documented_rfc3339_subset(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        for invalid in (
+            "20260831T200000Z",
+            "2026-08-31 20:00:00Z",
+            "2026-08-31T20:00:00+0000",
+            "2026-02-30T20:00:00Z",
+        ):
+            candidate = yaml.safe_load(yaml.safe_dump(baseline))
+            candidate["generated_at"] = invalid
+            assert any("date-time" in error for error in validate(candidate, schema)), invalid
 
     def test_class_a_requires_evidence_link(self):
         schema = load_schema("project-record-v1.schema.json")
@@ -264,6 +284,23 @@ class TestProjectRecordSchema:
         )
 
         assert validate(data, schema)
+
+    def test_local_references_reject_cross_platform_traversal(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        for invalid in (
+            "../status.json",
+            "docs/../status.json",
+            r"..\status.json",
+            r"docs\..\status.json",
+            "docs/./status.json",
+            "docs//status.json",
+        ):
+            candidate = yaml.safe_load(yaml.safe_dump(baseline))
+            candidate["claim_references"][0]["assertion_ref"] = invalid
+            assert validate(candidate, schema), invalid
 
     def test_claim_posture_is_required_and_bounded(self):
         schema = load_schema("project-record-v1.schema.json")

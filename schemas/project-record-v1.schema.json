@@ -204,8 +204,8 @@
     "contained_local_ref": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
-      "description": "Repository-relative path that does not contain a URI scheme, absolute root, or parent traversal."
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
+      "description": "Canonical POSIX repository-relative path that does not contain a URI scheme, absolute root, backslash separator, empty segment, current-directory segment, or parent traversal."
     },
     "assertion_local_ref": {
       "allOf": [{"$ref": "#/$defs/contained_local_ref"}],
