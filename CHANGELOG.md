@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add `project-record-v1.schema.json` and a valid YAML example for reader-mode
+  documentation, with canonical identity, implementation/deployment state,
+  authorship, structured claim posture, assertion-evidence references,
+  class-aware audience routes, limitations, industry applicability, and
+  search-intent separation.
+- Require pilot and public deployment states to cite an implemented or partial
+  deployment claim, and define conservative retired-state posture semantics;
+  the integrity runtime separately requires the qualifying assertion to be
+  verified.
+- Restrict Class D records to noncanonical `deployment-artifact` or `mirror`
+  roles so their canonical redirect cannot collapse into a self-reference.
+- Clarify current GitHub authority while retaining historical schema `$id`
+  namespaces as stable compatibility identifiers.
 - Add eighteen governance-memory v1 contracts for source custody projections,
   dynamic source census, stable normalized events, complete normalization
   parity, dual-lane lineage, governance testament, assertion evidence,

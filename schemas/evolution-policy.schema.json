@@ -8,7 +8,7 @@
   "properties": {
     "policy_id": {
       "type": "string",
-      "pattern": "^pol-[a-z0-9-]+$",
+      "pattern": "^pol-[a-z0-9-]+$(?![\\s\\S])",
       "description": "Unique policy identifier (kebab-case with pol- prefix)",
       "examples": ["pol-promote-ready", "pol-missing-ci"]
     },

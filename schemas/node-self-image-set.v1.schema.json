@@ -68,7 +68,7 @@
   "$defs": {
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+      "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"
     },
     "registry_node": {
       "type": "object",
@@ -77,7 +77,7 @@
       "properties": {
         "uid": {
           "type": "string",
-          "pattern": "^ent_[a-z]+_[0-9A-HJKMNP-TV-Z]{26}$"
+          "pattern": "^ent_[a-z]+_[0-9A-HJKMNP-TV-Z]{26}$(?![\\s\\S])"
         },
         "entity_type": {
           "type": "string",

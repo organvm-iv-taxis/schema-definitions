@@ -8,7 +8,7 @@
   "properties": {
     "entity_id": {
       "type": "string",
-      "pattern": "^ent_[a-z]+_[0-9A-HJKMNP-TV-Z]{26}$",
+      "pattern": "^ent_[a-z]+_[0-9A-HJKMNP-TV-Z]{26}$(?![\\s\\S])",
       "description": "UID of the entity this name belongs to"
     },
     "display_name": {
@@ -18,7 +18,7 @@
     },
     "slug": {
       "type": "string",
-      "pattern": "^[a-z0-9]+([a-z0-9-]*[a-z0-9])?$",
+      "pattern": "^[a-z0-9]+([a-z0-9-]*[a-z0-9])?$(?![\\s\\S])",
       "description": "URL-safe version of the display name (double-hyphens are semantic separators)"
     },
     "valid_from": {

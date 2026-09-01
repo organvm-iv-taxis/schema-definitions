@@ -74,7 +74,7 @@
         "properties": {
           "contract_name": {"const": "normalized-event.v1"},
           "contract_version": {"const": 1},
-          "event_id": {"type": "string", "pattern": "^evt_[a-f0-9]{64}$"},
+          "event_id": {"type": "string", "pattern": "^evt_[a-f0-9]{64}$(?![\\s\\S])"},
           "snapshot_id": {"type": "string", "minLength": 1},
           "snapshot_digest": {"$ref": "#/$defs/digest"}
         },
@@ -297,7 +297,7 @@
   "$defs": {
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+      "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"
     },
     "ready_artifact_reference": {
       "type": "object",

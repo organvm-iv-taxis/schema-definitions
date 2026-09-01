@@ -81,11 +81,11 @@
       "properties": {
         "name": {
           "type": "string",
-          "pattern": "^[a-zA-Z0-9._-]+$"
+          "pattern": "^[a-zA-Z0-9._-]+$(?![\\s\\S])"
         },
         "org": {
           "type": "string",
-          "pattern": "^(organvm-[ivx]+-[a-z]+|meta-organvm)$"
+          "pattern": "^(organvm-[ivx]+-[a-z]+|meta-organvm)$(?![\\s\\S])"
         },
         "status": { "type": "string" },
         "updated": {
@@ -103,7 +103,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$"
+            "pattern": "^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$(?![\\s\\S])"
           }
         },
         "promotion_status": {

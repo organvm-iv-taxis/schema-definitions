@@ -5,17 +5,19 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import rfc8785
 from jsonschema import Draft202012Validator, FormatChecker
 
+from scripts import validate_governance_memory as governance_validator
 from scripts.validate_governance_memory import (
     CONTRACT_TO_SCHEMA,
     semantic_errors,
     validate_document,
 )
-
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = ROOT / "schemas"
@@ -291,6 +293,380 @@ def test_verified_operator_directive_requires_source_event_and_ratification():
     assert semantic_errors(data)
 
 
+def test_duplicate_evidence_ids_fail_in_every_verification_state():
+    baseline = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    baseline["evidence_references"][1]["evidence_id"] = baseline[
+        "evidence_references"
+    ][0]["evidence_id"]
+
+    expected = "evidence_references contain duplicate evidence_id values"
+    for state in ("unverified", "verified", "stale", "disputed"):
+        candidate = copy.deepcopy(baseline)
+        candidate["verification_state"] = state
+        assert any(expected in error for error in semantic_errors(candidate)), state
+
+
+def test_malformed_evidence_ids_do_not_abort_validation_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    malformed = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    malformed["verification_state"] = "unverified"
+    malformed["evidence_references"][0]["evidence_id"] = {"bad": "id"}
+    schema_errors, semantic_error_list = validate_document(malformed)
+    assert any("evidence_id" in error for error in schema_errors)
+    assert isinstance(semantic_error_list, list)
+
+    malformed_path = tmp_path / "malformed-evidence-id.json"
+    valid_path = tmp_path / "valid.json"
+    malformed_path.write_text(json.dumps(malformed))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_governance_memory.py",
+            str(malformed_path),
+            str(valid_path),
+        ],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {malformed_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
+def test_malformed_independence_groups_do_not_abort_validation_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    malformed = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    malformed["evidence_references"][0]["independence_group"] = {"bad": "group"}
+    schema_errors, semantic_error_list = validate_document(malformed)
+    assert any("independence_group" in error for error in schema_errors)
+    assert isinstance(semantic_error_list, list)
+
+    malformed_path = tmp_path / "malformed-independence-group.json"
+    valid_path = tmp_path / "valid.json"
+    malformed_path.write_text(json.dumps(malformed))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_governance_memory.py",
+            str(malformed_path),
+            str(valid_path),
+        ],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {malformed_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
+def test_schema_invalid_documents_skip_semantics_without_aborting_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    mutations = (
+        ("lineage-graph-v1-example.json", ("nodes", 0, "node_id"), {}),
+        ("coverage-receipt-v1-example.json", ("sources", 0, "source_id"), []),
+        ("governance-stage-receipt-v1-example.json", ("outputs", 0, "size_bytes"), {}),
+        ("source-census-v1-example.json", ("discovery_roots", 0, "root_id"), []),
+    )
+    malformed_paths = []
+    for index, (example_name, path, value) in enumerate(mutations):
+        malformed = load(EXAMPLES_DIR / example_name)
+        target = malformed
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = value
+        schema_errors, semantic_error_list = validate_document(malformed)
+        assert schema_errors, example_name
+        assert semantic_error_list == [], example_name
+
+        malformed_path = tmp_path / f"malformed-{index}.json"
+        malformed_path.write_text(json.dumps(malformed))
+        malformed_paths.append(malformed_path)
+
+    valid_path = tmp_path / "valid.json"
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_governance_memory.py",
+            *(str(path) for path in malformed_paths),
+            str(valid_path),
+        ],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    for malformed_path in malformed_paths:
+        assert f"FAIL {malformed_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
+def test_assertion_fact_is_a_bounded_machine_readable_predicate_value():
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    data["fact"] = {
+        "predicate": "industry_status",
+        "subject": "Education",
+        "value": "deployed",
+    }
+
+    assert validate_document(data) == ([], [])
+
+    del data["fact"]["value"]
+    schema_errors, _semantic_errors = validate_document(data)
+    assert any("value" in error for error in schema_errors)
+
+
+def test_current_state_owner_and_verifier_must_be_independent_sources():
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    source = data["evidence_references"][0]
+    data["assertion_class"] = "current_state"
+    data["verification_state"] = "verified"
+    data["freshness"] = {
+        "verified_at": datetime.now(UTC).isoformat(),
+        "max_age_seconds": 3600,
+        "status": "fresh",
+    }
+    data["evidence_references"] = [
+        {**source, "evidence_type": "owner_record"},
+        {
+            **source,
+            "evidence_id": "spoofed-verifier",
+            "evidence_type": "fresh_verifier_receipt",
+        },
+    ]
+
+    schema_errors, invariant_errors = validate_document(data)
+    assert schema_errors == []
+    assert any("distinct nonempty independence groups" in error for error in invariant_errors)
+
+    data["evidence_references"][1]["independence_group"] = "independent-verifier"
+    data["evidence_references"][1]["body_hash"] = "sha256:" + "0" * 64
+    assert any("source identities" in error for error in semantic_errors(data))
+
+
+def test_assertion_machine_patterns_reject_final_newlines():
+    baseline = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+
+    predicate = copy.deepcopy(baseline)
+    predicate["fact"] = {"predicate": "industry_status\n", "value": "deployed"}
+    schema_errors, _ = validate_document(predicate)
+    assert any("predicate" in error for error in schema_errors)
+
+    body_hash = copy.deepcopy(baseline)
+    body_hash["evidence_references"][0]["body_hash"] += "\n"
+    schema_errors, _ = validate_document(body_hash)
+    assert any("body_hash" in error for error in schema_errors)
+
+    for field_path in (
+        ("assertion_id",),
+        ("evidence_references", 0, "evidence_id"),
+        ("evidence_references", 0, "independence_group"),
+        ("evidence_references", 0, "reference"),
+    ):
+        candidate = copy.deepcopy(baseline)
+        target = candidate
+        for part in field_path[:-1]:
+            target = target[part]
+        target[field_path[-1]] += "\n"
+        schema_errors, _ = validate_document(candidate)
+        assert schema_errors, field_path
+
+
+def test_assertion_freshness_rejects_future_and_expired_receipts():
+    baseline = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    validation_now = datetime(2026, 8, 31, 13, 0, tzinfo=UTC)
+
+    baseline["freshness"] = {
+        "verified_at": "2026-08-31T14:00:00Z",
+        "max_age_seconds": 7200,
+        "status": "fresh",
+    }
+    assert "freshness.verified_at cannot be in the future" in semantic_errors(
+        baseline,
+        now=validation_now,
+    )
+
+    baseline["freshness"] = {
+        "verified_at": "2026-08-31T10:00:00Z",
+        "max_age_seconds": 60,
+        "status": "fresh",
+    }
+    assert "freshness.status 'fresh' is expired at validation time" in semantic_errors(
+        baseline,
+        now=validation_now,
+    )
+
+
+def test_evidence_observation_must_precede_verification_and_now():
+    validation_now = datetime(2026, 8, 31, 13, 0, tzinfo=UTC)
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    data["evidence_references"][0]["observed_at"] = "2026-08-31T14:00:00Z"
+    assert any(
+        "observed_at cannot be in the future" in error
+        for error in semantic_errors(data, now=validation_now)
+    )
+
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    data["assertion_class"] = "current_state"
+    data["freshness"] = {
+        "verified_at": "2026-08-31T12:00:00Z",
+        "max_age_seconds": 7200,
+        "status": "fresh",
+    }
+    data["evidence_references"][0]["evidence_type"] = "owner_record"
+    data["evidence_references"][1]["evidence_type"] = "fresh_verifier_receipt"
+    data["evidence_references"][1]["observed_at"] = "2026-08-31T12:01:00Z"
+    schema_errors, invariant_errors = validate_document(data)
+    assert schema_errors == []
+    assert any("later than freshness.verified_at" in error for error in invariant_errors)
+
+    data["evidence_references"][1]["observed_at"] = "2026-08-31T09:59:59Z"
+    assert any(
+        "exceeds the declared freshness window" in error
+        for error in semantic_errors(data, now=validation_now)
+    )
+
+    del data["evidence_references"][1]["observed_at"]
+    schema_errors, invariant_errors = validate_document(data)
+    assert any("observed_at" in error for error in schema_errors)
+    assert invariant_errors == []
+
+
+def test_assertion_freshness_accepts_lowercase_utc_suffix():
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    data["freshness"] = {
+        "verified_at": "2026-08-31T10:00:00z",
+        "status": "not_applicable",
+    }
+
+    assert validate_document(data) == ([], [])
+    assert semantic_errors(
+        data,
+        now=datetime(2026, 8, 31, 13, 0, tzinfo=UTC),
+    ) == []
+
+
+def test_assertion_freshness_rejects_utc_normalization_overflow_without_aborting(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    boundary = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    boundary["freshness"] = {
+        "verified_at": "0001-01-01T00:00:00+23:59",
+        "status": "not_applicable",
+    }
+    _schema_errors, semantic_error_list = validate_document(boundary)
+    assert any("ISO 8601 date-time" in error for error in semantic_error_list)
+
+    boundary_path = tmp_path / "boundary-timestamp.json"
+    valid_path = tmp_path / "valid.json"
+    boundary_path.write_text(json.dumps(boundary))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_governance_memory.py", str(boundary_path), str(valid_path)],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {boundary_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
+def test_freshness_window_underflow_does_not_abort_later_batch_target(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    boundary = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    boundary["assertion_class"] = "current_state"
+    boundary["freshness"] = {
+        "verified_at": "0001-01-01T00:00:00Z",
+        "max_age_seconds": 60,
+        "status": "fresh",
+    }
+    boundary["evidence_references"][0]["evidence_type"] = "owner_record"
+    boundary["evidence_references"][0]["observed_at"] = "0001-01-01T00:00:00Z"
+    boundary["evidence_references"][1]["evidence_type"] = "fresh_verifier_receipt"
+    boundary["evidence_references"][1]["observed_at"] = "0001-01-01T00:00:00Z"
+    schema_errors, semantic_error_list = validate_document(boundary)
+    assert schema_errors == []
+    assert any("expired" in error for error in semantic_error_list)
+
+    boundary_path = tmp_path / "boundary-window.json"
+    valid_path = tmp_path / "valid.json"
+    boundary_path.write_text(json.dumps(boundary))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_governance_memory.py", str(boundary_path), str(valid_path)],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {boundary_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
+def test_assertion_freshness_rejects_unbounded_ages_without_aborting_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    huge = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    huge["freshness"] = {
+        "verified_at": "2026-08-31T10:00:00Z",
+        "max_age_seconds": 10**100,
+        "status": "fresh",
+    }
+    schema_errors, semantic_error_list = validate_document(huge)
+    assert any("greater than the maximum" in error for error in schema_errors)
+    assert semantic_error_list == []
+
+    huge_path = tmp_path / "huge.json"
+    valid_path = tmp_path / "valid.json"
+    huge_path.write_text(json.dumps(huge))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_governance_memory.py", str(huge_path), str(valid_path)],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {huge_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
 def test_ratified_operator_directive_accepts_event_bound_freshness():
     data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
     data["assertion_class"] = "operator_directive"
@@ -527,7 +903,8 @@ def test_self_image_registry_projection_canonicalization_failure_is_reported():
 
     schema_errors, invariant_errors = validate_document(data)
     assert schema_errors
-    assert any("RFC 8785 canonicalizable" in error for error in invariant_errors)
+    assert invariant_errors == []
+    assert any("RFC 8785 canonicalizable" in error for error in semantic_errors(data))
 
 
 def test_self_declared_registered_ids_cannot_replace_registry_denominator():
@@ -589,7 +966,8 @@ def test_cadence_run_one_is_valid_only_as_an_incomplete_first_traversal():
     data["readiness"]["status"] = "ready"
     schema_errors, invariant_errors = validate_document(data)
     assert schema_errors
-    assert invariant_errors
+    assert invariant_errors == []
+    assert semantic_errors(data)
 
 
 def test_cadence_false_ready_rejects_nonzero_fixed_point_counts():
@@ -598,7 +976,8 @@ def test_cadence_false_ready_rejects_nonzero_fixed_point_counts():
 
     schema_errors, invariant_errors = validate_document(data)
     assert schema_errors
-    assert invariant_errors
+    assert invariant_errors == []
+    assert semantic_errors(data)
 
 
 def test_cadence_run_two_ready_binds_the_previous_output_digest():

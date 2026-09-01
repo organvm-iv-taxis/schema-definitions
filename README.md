@@ -6,6 +6,7 @@ Canonical JSON Schema definitions for the organvm eight-organ system's data cont
 
 | Schema | Validates | Source of Truth |
 |--------|-----------|-----------------|
+| `project-record-v1.schema.json` | Canonical identity, state, authorship, assertion references, reader routes, and search intent for one repository project | Reader-mode documentation contract |
 | `registry-v2.schema.json` | `registry-v2.json` | Repository state across all 8 organs |
 | `seed-v1.schema.json` | `seed.yaml` | Per-repo automation contracts |
 | `governance-rules.schema.json` | `governance-rules.json` | Dependency rules, promotion state machine |
@@ -25,6 +26,7 @@ embed a provider catalog or deployment-specific path.
 
 | Contract | Responsibility |
 |----------|----------------|
+| `project-record-v1.schema.json` | One project's invariant facts and audience projections, linked to assertion-evidence records |
 | `source-envelope.v1.schema.json` | Provider-neutral source identity, authority, raw-unit content binding, and private custody pointer |
 | `lineage-graph.v1.schema.json` | Separate operator-intent and artifact timelines with reviewed typed edges |
 | `governance-testament.v1.schema.json` | Ratified directives, layers, instruments, ideals, predicates, and citations |
@@ -43,6 +45,36 @@ embed a provider catalog or deployment-specific path.
 | `governance-cadence-receipt.v1.schema.json` | Ordered nine-stage receipt chain and fixed-point evidence |
 | `governance-atlas-receipt.v1.schema.json` | Assertion, ideal, self-image, timeline, zoom, and Atlas readiness |
 | `governance-snapshot-bundle.v1.schema.json` | Frozen cross-owner bundle with two-run and post-proof idempotence |
+
+For `project-record.v1`, a `pilot` or `public` deployment state is established
+only by an `implemented` or `partial` deployment claim that resolves to a
+verified, non-expired `current_state` assertion whose machine-readable
+`fact.predicate` is `deployment_status` and whose `fact.value` exactly matches
+the project record. A `retired` state still requires verified evidence, but may
+use a matching historical assertion; its qualifying claim may also be
+`contradicted` when the evidence establishes that the former deployment is now
+unavailable. `proposed` and `unknown` claims never establish any of those three
+lifecycle states.
+
+Likewise, every `deployed` or `piloted` industry resolves at least one cited
+deployment or adoption claim to verified, fresh `current_state` evidence. Its
+machine-readable fact uses `industry_status`, names the industry in
+`fact.subject`, binds `fact.project_repository` to `canonical_repository`, and
+exactly matches the declared industry status.
+
+Authorship declarations are likewise evidence-bound: an implemented or partial
+authorship claim resolves to a verified factual `authorship` assertion whose
+project, subject, role value, contributions, collaborators, generated,
+inherited, and external vocabularies exactly match the project record.
+
+Class D records are noncanonical delivery surfaces and therefore use either the
+`deployment-artifact` or `mirror` repository role. Their
+`canonical_repository` and redirect target identify the same upstream
+repository, and `links.repository` must identify that upstream as well. CI
+validates the bundled synthetic fixture without asserting a checkout identity.
+Callers validating a live Class D checkout must pass its owner/name through
+`--actual-repository`; the integrity runtime then requires it to be distinct
+from the canonical target.
 
 `exact_all` means complete classification of the declared denominator. It does
 not mean ready. Wherever a contract exposes `readiness`, `ready` additionally
@@ -72,6 +104,12 @@ python scripts/validate.py path/to/registry-v2.json
 # Validate all examples
 python scripts/validate.py --all-examples
 
+# Strictly bind a project record to its local assertions/evidence and to the
+# checked-out GitHub identity (required for Class D delivery surfaces)
+python scripts/validate.py project-record.yml \
+  --repository-root . \
+  --actual-repository "$GITHUB_REPOSITORY"
+
 # Validate governance-memory shape and cross-field invariants
 python scripts/validate_governance_memory.py \
   examples/{owner-reference,parameter-contract,source-envelope,assertion-evidence,lineage-graph,governance-testament,node-self-image,coverage-receipt}-v1-example.json
@@ -91,6 +129,13 @@ pip install -e ".[dev]"
 
 Requires: Python 3.11+, `jsonschema`, `pyyaml`.
 
-## Part of the Eight-Organ System
+## Authority and schema identifiers
 
-This repo belongs to **meta-organvm** (ORGAN VIII) and provides the data contracts that `organvm-engine` validates against.
+The canonical GitHub authority for this repository is
+[`organvm-iv-taxis/schema-definitions`](https://github.com/organvm-iv-taxis/schema-definitions).
+It provides system-wide data contracts validated by `organvm-engine`.
+
+Some pre-existing schemas retain `$id` values under the historical
+`meta-organvm.github.io` namespace. Those identifiers remain stable for
+compatibility; they are schema identifiers, not a statement of current GitHub
+ownership. New contracts use the current canonical authority namespace.

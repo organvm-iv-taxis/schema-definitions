@@ -1,0 +1,86 @@
+"""Deterministic JSON Schema format checks without optional dependency drift."""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from urllib.parse import urlsplit
+
+from jsonschema import FormatChecker
+
+FORMAT_CHECKER = FormatChecker()
+_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
+_INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_AUTHORITY = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%\[\]-]*$")
+_USERINFO = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:%-]*$")
+_PATH = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%/\-]*$")
+_QUERY_OR_FRAGMENT = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%/?\-]*$")
+_RFC3339_DATE_TIME = re.compile(
+    r"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
+    r"[Tt](?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d"
+    r"(?:\.\d+)?(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$"
+)
+
+
+@FORMAT_CHECKER.checks("uri")
+def is_uri(value: object) -> bool:
+    """Check absolute URI syntax for the contract's machine-readable links."""
+    if not isinstance(value, str):
+        return True
+    if any(
+        character.isspace()
+        or ord(character) < 0x20
+        or ord(character) == 0x7F
+        for character in value
+    ):
+        return False
+    if _INVALID_PERCENT_ESCAPE.search(value):
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        # Malformed bracketed authorities (for example ``http://[``) raise
+        # instead of returning a SplitResult.  Format validation must remain a
+        # bounded predicate rather than aborting an entire validation batch.
+        return False
+    if not parsed.scheme or not _SCHEME.fullmatch(parsed.scheme):
+        return False
+    if (
+        _AUTHORITY.fullmatch(parsed.netloc) is None
+        or _PATH.fullmatch(parsed.path) is None
+        or _QUERY_OR_FRAGMENT.fullmatch(parsed.query) is None
+        or _QUERY_OR_FRAGMENT.fullmatch(parsed.fragment) is None
+    ):
+        return False
+    if parsed.netloc.count("@") > 1:
+        return False
+    if "@" in parsed.netloc:
+        userinfo, _authority = parsed.netloc.split("@", 1)
+        if _USERINFO.fullmatch(userinfo) is None:
+            return False
+    # ``SplitResult.port`` performs the numeric and range checks that
+    # ``urlsplit`` deliberately defers.  Apply them to every URI authority,
+    # not only HTTP(S), so custom schemes cannot smuggle malformed ports into
+    # otherwise valid generic URI fields.
+    try:
+        _ = parsed.port
+    except ValueError:
+        return False
+    if parsed.scheme in {"http", "https"}:
+        return bool(parsed.netloc and parsed.hostname)
+    return bool(parsed.netloc or parsed.path)
+
+
+@FORMAT_CHECKER.checks("date-time")
+def is_date_time(value: object) -> bool:
+    """Check the timezone-bearing RFC 3339 subset used by ORGANVM records."""
+    if not isinstance(value, str):
+        return True
+    if _RFC3339_DATE_TIME.fullmatch(value) is None:
+        return False
+    try:
+        normalized = value.replace("Z", "+00:00").replace("z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None

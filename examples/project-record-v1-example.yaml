@@ -1,0 +1,88 @@
+contract_name: project-record.v1
+contract_version: 1
+project_id: example-project
+name: Example Project
+canonical_repository: organvm/example-project
+former_repositories: []
+repository_role: canonical
+documentation_class: B
+one_sentence: >-
+  A bounded example showing how one factual record supports several reader routes.
+problem: >-
+  Different readers need different explanatory sequences without receiving
+  contradictory claims about implementation, authorship, or deployment.
+intended_users:
+  - documentation maintainers
+  - project evaluators
+implementation_status: PROTOTYPE
+deployment_status: not-deployed
+authorship:
+  owner: Anthony James Padavano
+  role: project designer and implementer
+  contributions:
+    - information architecture
+    - implementation
+  collaborators: []
+  generated: []
+  inherited: []
+  external: []
+claim_references:
+  - id: project-status
+    assertion_contract: assertion-evidence.v1
+    assertion_id: project_record_fixture_status
+    assertion_ref: docs/evidence/claims/status.json
+    scope: status
+    claim_posture: implemented
+    placements: [readme, general, technical, evaluator, evidence]
+  - id: authorship-boundary
+    assertion_contract: assertion-evidence.v1
+    assertion_id: project_record_fixture_authorship
+    assertion_ref: docs/evidence/claims/authorship.json
+    scope: authorship
+    claim_posture: implemented
+    placements: [readme, evaluator, evidence]
+  - id: structural-validation
+    assertion_contract: assertion-evidence.v1
+    assertion_id: project_record_fixture_structural_validation
+    assertion_ref: docs/evidence/claims/structural-validation.json
+    scope: capability
+    claim_posture: implemented
+    placements: [readme, technical, evaluator, evidence]
+limitations:
+  - id: example-only
+    statement: This is a documentation example, not a deployed product.
+audience_routes:
+  - mode: general
+    path: docs/audiences/general.md
+    primary_question: What is this and why does it matter?
+    surface: public
+    search_intents: [informational]
+  - mode: technical
+    path: docs/audiences/technical.md
+    primary_question: How is the documentation contract validated?
+    surface: public
+    search_intents: [technical, implementation]
+  - mode: evaluator
+    path: docs/audiences/evaluator.md
+    primary_question: What was built and where is the evidence?
+    surface: public
+    search_intents: [hiring]
+industries: []
+concepts:
+  - progressive-disclosure
+  - evidence-bounded-documentation
+search_intents:
+  - intent: informational
+    terms:
+      - reader-mode documentation
+      - audience-specific documentation
+  - intent: technical
+    terms:
+      - project record schema
+      - documentation claim validation
+links:
+  repository: https://github.com/organvm/example-project
+  documentation: docs/audiences/general.md
+  evidence: docs/evidence/README.md
+generated_at: "2026-08-31T20:00:00Z"
+verified_at: "2026-08-31T20:00:00Z"

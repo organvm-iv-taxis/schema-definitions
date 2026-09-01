@@ -38,8 +38,8 @@
       "type": "object",
       "required": ["constitutional", "topology"],
       "properties": {
-        "constitutional": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
-        "topology": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+        "constitutional": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"},
+        "topology": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"}
       },
       "additionalProperties": false
     },

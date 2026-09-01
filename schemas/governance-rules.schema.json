@@ -100,7 +100,7 @@
       "type": "object",
       "required": ["id", "name", "statement", "enforcement", "severity"],
       "properties": {
-        "id": { "type": "string", "pattern": "^AX-\\d+$" },
+        "id": { "type": "string", "pattern": "^AX-\\d+$(?![\\s\\S])" },
         "name": { "type": "string" },
         "statement": { "type": "string" },
         "enforcement": { "type": "string", "enum": ["automated", "audit", "manual"] },
@@ -126,7 +126,7 @@
       "type": "object",
       "required": ["id", "name", "statement", "enforcement", "severity"],
       "properties": {
-        "id": { "type": "string", "pattern": "^RR-\\d+$" },
+        "id": { "type": "string", "pattern": "^RR-\\d+$(?![\\s\\S])" },
         "name": { "type": "string" },
         "statement": { "type": "string" },
         "enforcement": { "type": "string", "enum": ["automated", "audit", "manual"] },

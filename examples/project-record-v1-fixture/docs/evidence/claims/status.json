@@ -1,0 +1,22 @@
+{
+  "contract_name": "assertion-evidence.v1",
+  "contract_version": 1,
+  "assertion_id": "project_record_fixture_status",
+  "assertion_class": "historical_record",
+  "statement": "At fixture generation, the project record classified the example as a non-deployed prototype.",
+  "fact": {
+    "predicate": "implementation_status",
+    "subject": "organvm/example-project",
+    "value": "PROTOTYPE"
+  },
+  "verification_state": "verified",
+  "evidence_references": [
+    {
+      "evidence_id": "project_record_fixture_status_record",
+      "independence_group": "project-record-fixture",
+      "evidence_type": "artifact",
+      "reference": "docs/evidence/sources/status-record.txt",
+      "body_hash": "sha256:eeafcb2056eb4616a0ff5d8a2e165dfc65f9122c362905f86790a088a92e03fe"
+    }
+  ]
+}

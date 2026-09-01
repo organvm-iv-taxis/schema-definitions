@@ -83,7 +83,7 @@
   "$defs": {
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+      "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"
     },
     "raw_unit": {
       "type": "object",
@@ -102,7 +102,7 @@
       "properties": {
         "raw_unit_id": {
           "type": "string",
-          "pattern": "^raw_[A-Za-z0-9_-]+$",
+          "pattern": "^raw_[A-Za-z0-9_-]+$(?![\\s\\S])",
           "description": "Canonical raw-unit identity. Snapshot IDs, status, paths, enumeration order, and provider display order are not identity inputs."
         },
         "legacy_source_id": {"type": "string", "minLength": 1},
