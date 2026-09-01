@@ -1,0 +1,17 @@
+{
+  "contract_name": "assertion-evidence.v1",
+  "contract_version": 1,
+  "assertion_id": "project_record_fixture_authorship",
+  "assertion_class": "historical_record",
+  "statement": "The fixture's authorship record bounds its purpose to schema and validation demonstration.",
+  "verification_state": "verified",
+  "evidence_references": [
+    {
+      "evidence_id": "project_record_fixture_authorship_record",
+      "independence_group": "project-record-fixture",
+      "evidence_type": "artifact",
+      "reference": "docs/evidence/sources/authorship-record.txt",
+      "body_hash": "sha256:9f51652a6d3a10c4b5c37eb9f6b79a30d8667d16b7a9230fa64bda4a47070b80"
+    }
+  ]
+}

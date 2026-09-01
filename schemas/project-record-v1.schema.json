@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://organvm-iv-taxis.github.io/schema-definitions/project-record-v1.schema.json",
+  "title": "ORGANVM Project Record v1",
+  "description": "Canonical factual substrate for reader-mode documentation. Audience editions may change rhetoric, not identity, state, authorship, evidence, or limitations. Material claims resolve to assertion-evidence.v1 records rather than being duplicated here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_name",
+    "contract_version",
+    "project_id",
+    "name",
+    "canonical_repository",
+    "repository_role",
+    "documentation_class",
+    "one_sentence",
+    "problem",
+    "intended_users",
+    "implementation_status",
+    "deployment_status",
+    "authorship",
+    "claim_references",
+    "limitations",
+    "audience_routes",
+    "search_intents",
+    "links",
+    "generated_at",
+    "verified_at"
+  ],
+  "properties": {
+    "contract_name": {"const": "project-record.v1"},
+    "contract_version": {"const": 1},
+    "project_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "name": {"type": "string", "minLength": 1, "maxLength": 160},
+    "canonical_repository": {"$ref": "#/$defs/repository"},
+    "former_repositories": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/repository"},
+      "default": []
+    },
+    "repository_role": {
+      "type": "string",
+      "enum": [
+        "canonical",
+        "mirror",
+        "deployment-artifact",
+        "archive",
+        "contribution",
+        "upstream-fork",
+        "profile",
+        "governance"
+      ]
+    },
+    "documentation_class": {"type": "string", "enum": ["A", "B", "C", "D", "E", "F"]},
+    "one_sentence": {"type": "string", "minLength": 20, "maxLength": 300},
+    "problem": {"type": "string", "minLength": 20},
+    "intended_users": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 2}
+    },
+    "implementation_status": {
+      "description": "Substantive implementation maturity. Deployment is represented separately by deployment_status.",
+      "oneOf": [
+        {"const": "ACTIVE", "description": "Maintained substantive implementation; this does not imply deployment."},
+        {"const": "PROTOTYPE", "description": "Substantive behavior exists but remains incomplete or unstable."},
+        {"const": "SKELETON", "description": "Scaffolding or interfaces exist with little substantive domain behavior."},
+        {"const": "DESIGN_ONLY", "description": "Specification or design exists without substantive executable domain behavior."},
+        {"const": "ARCHIVED", "description": "The implementation is no longer active."}
+      ]
+    },
+    "deployment_status": {
+      "description": "Deployment lifecycle state. A pilot or public state requires at least one verified deployment assertion whose project-record posture is implemented or partial. A retired state requires verified evidence of either the historical deployment or its current unavailability, so its qualifying posture may additionally be contradicted; proposed and unknown claims never establish a deployment lifecycle state.",
+      "type": "string",
+      "enum": ["not-deployed", "internal", "pilot", "public", "retired", "not-applicable"]
+    },
+    "authorship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "role", "contributions"],
+      "properties": {
+        "owner": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 3},
+        "contributions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 2}
+        },
+        "collaborators": {"type": "array", "items": {"type": "string"}},
+        "generated": {"type": "array", "items": {"type": "string"}},
+        "inherited": {"type": "array", "items": {"type": "string"}},
+        "external": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "claim_references": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/claim_reference"},
+      "contains": {
+        "type": "object",
+        "properties": {"scope": {"const": "status"}},
+        "required": ["scope"]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement"],
+        "dependentRequired": {
+          "assertion_ref": ["assertion_id"],
+          "assertion_id": ["assertion_ref"]
+        },
+        "properties": {
+          "id": {"$ref": "#/$defs/slug"},
+          "statement": {"type": "string", "minLength": 3},
+          "assertion_id": {"type": "string", "minLength": 1},
+          "assertion_ref": {"$ref": "#/$defs/assertion_local_ref"}
+        }
+      }
+    },
+    "audience_routes": {
+      "type": "array",
+      "description": "Audience editions. Modes and repository-relative paths must each be unique; the runtime validator enforces property-level path uniqueness.",
+      "items": {"$ref": "#/$defs/audience_route"}
+    },
+    "industries": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/industry"},
+      "default": []
+    },
+    "concepts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/slug"},
+      "default": []
+    },
+    "search_intents": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["intent", "terms"],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["informational", "problem", "technical", "comparative", "commercial", "research", "hiring", "implementation"]
+          },
+          "terms": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 2}
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "documentation"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?$"
+        },
+        "documentation": {"$ref": "#/$defs/local_or_http_ref"},
+        "project_page": {"$ref": "#/$defs/http_uri"},
+        "demo": {"$ref": "#/$defs/http_uri"},
+        "deployment": {"$ref": "#/$defs/http_uri"},
+        "evidence": {"$ref": "#/$defs/local_or_http_ref"}
+      }
+    },
+    "redirect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "target"],
+      "properties": {
+        "status": {"type": "string", "enum": ["none", "planned", "active", "retired"]},
+        "target": {"$ref": "#/$defs/http_uri"}
+      }
+    },
+    "generated_at": {"type": "string", "format": "date-time"},
+    "verified_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "contained_local_ref": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
+      "description": "Repository-relative path that does not contain a URI scheme, absolute root, or parent traversal."
+    },
+    "assertion_local_ref": {
+      "allOf": [{"$ref": "#/$defs/contained_local_ref"}],
+      "description": "Local assertion path. Project Record v1 deliberately rejects remote assertion references because it has no authenticated fetch and content-binding policy."
+    },
+    "http_uri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "local_or_http_ref": {
+      "description": "A repository-contained relative path or an absolute HTTP(S) URI.",
+      "oneOf": [
+        {"$ref": "#/$defs/contained_local_ref"},
+        {"$ref": "#/$defs/http_uri"}
+      ]
+    },
+    "claim_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "assertion_contract", "assertion_id", "assertion_ref", "scope", "claim_posture"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "assertion_contract": {"const": "assertion-evidence.v1"},
+        "assertion_id": {"type": "string", "minLength": 1},
+        "assertion_ref": {"$ref": "#/$defs/assertion_local_ref"},
+        "scope": {
+          "description": "The invariant project fact supported by this assertion reference.",
+          "oneOf": [
+            {"const": "identity", "description": "Project or repository identity."},
+            {"const": "status", "description": "Implementation maturity or current project state, excluding deployment."},
+            {"const": "capability", "description": "Implemented or proposed system behavior."},
+            {"const": "authorship", "description": "Contribution, ownership, or collaboration boundary."},
+            {"const": "deployment", "description": "Deployment existence, environment, or lifecycle state."},
+            {"const": "adoption", "description": "Use or uptake by people or organizations."},
+            {"const": "performance", "description": "Measured technical performance."},
+            {"const": "outcome", "description": "Measured user, operational, or commercial result."},
+            {"const": "limitation", "description": "Known boundary, absence, or unresolved constraint."},
+            {"const": "rights", "description": "License, copyright, attribution, or usage rights."},
+            {"const": "provenance", "description": "Origin, lineage, inheritance, or source history."}
+          ]
+        },
+        "claim_posture": {
+          "type": "string",
+          "description": "Delivery posture of the claim in this project record. This is independent from assertion-evidence verification_state, which describes evidentiary verification rather than implementation state.",
+          "enum": ["implemented", "partial", "proposed", "unknown", "contradicted"]
+        },
+        "placements": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "enum": ["readme", "general", "technical", "humanities", "business", "evaluator", "evidence"]}
+        }
+      }
+    },
+    "audience_route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "path", "primary_question", "surface"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["general", "technical", "humanities", "business", "evaluator"]},
+        "path": {"type": "string", "pattern": "^docs/audiences/[a-z0-9-]+\\.md$"},
+        "primary_question": {"type": "string", "minLength": 10},
+        "surface": {"type": "string", "enum": ["public", "private", "internal"]},
+        "search_intents": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "enum": ["informational", "problem", "technical", "comparative", "commercial", "research", "hiring", "implementation"]}
+        }
+      }
+    },
+    "industry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status"],
+      "properties": {
+        "name": {"type": "string", "minLength": 2},
+        "status": {"type": "string", "enum": ["deployed", "piloted", "proposed"]},
+        "path": {"type": "string", "pattern": "^docs/industries/[a-z0-9-]+\\.md$"},
+        "claim_references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/slug"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["deployed", "piloted"]}}},
+          "then": {"required": ["claim_references"], "properties": {"claim_references": {"minItems": 1}}}
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"documentation_class": {"const": "A"}}},
+      "then": {
+        "properties": {
+          "audience_routes": {
+            "minItems": 5,
+            "maxItems": 5,
+            "allOf": [
+              {"contains": {"type": "object", "properties": {"mode": {"const": "general"}}, "required": ["mode"]}},
+              {"contains": {"type": "object", "properties": {"mode": {"const": "technical"}}, "required": ["mode"]}},
+              {"contains": {"type": "object", "properties": {"mode": {"const": "humanities"}}, "required": ["mode"]}},
+              {"contains": {"type": "object", "properties": {"mode": {"const": "business"}}, "required": ["mode"]}},
+              {"contains": {"type": "object", "properties": {"mode": {"const": "evaluator"}}, "required": ["mode"]}}
+            ]
+          },
+          "links": {"required": ["evidence"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"documentation_class": {"const": "B"}}},
+      "then": {
+        "properties": {
+          "audience_routes": {"minItems": 2, "maxItems": 3},
+          "links": {"required": ["evidence"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"documentation_class": {"const": "C"}}},
+      "then": {"properties": {"audience_routes": {"contains": {"type": "object", "properties": {"mode": {"const": "technical"}}, "required": ["mode"]}}}}
+    },
+    {
+      "if": {"properties": {"documentation_class": {"const": "D"}}},
+      "then": {
+        "required": ["redirect"],
+        "properties": {
+          "repository_role": {
+            "enum": ["mirror", "deployment-artifact"],
+            "description": "Class D is a noncanonical delivery surface. The integrity runtime binds its canonical repository and redirect target to an identity distinct from the checked-out repository."
+          },
+          "audience_routes": {"maxItems": 0},
+          "redirect": {
+            "properties": {
+              "status": {"enum": ["planned", "active", "retired"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"documentation_class": {"const": "E"}}},
+      "then": {"properties": {"audience_routes": {"contains": {"type": "object", "properties": {"mode": {"const": "humanities"}}, "required": ["mode"]}}}}
+    },
+    {
+      "if": {"properties": {"documentation_class": {"const": "F"}}},
+      "then": {
+        "properties": {
+          "claim_references": {
+            "contains": {"type": "object", "properties": {"scope": {"const": "provenance"}}, "required": ["scope"]}
+          },
+          "audience_routes": {"maxItems": 0}
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["repository_role"],
+        "properties": {
+          "repository_role": {"enum": ["mirror", "deployment-artifact"]}
+        }
+      },
+      "then": {
+        "required": ["redirect"],
+        "properties": {
+          "redirect": {
+            "properties": {
+              "status": {"enum": ["planned", "active", "retired"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Pilot and public lifecycle states need a bounded claim that says the deployment is implemented or partial. Assertion verification is enforced by the integrity runtime.",
+      "if": {
+        "required": ["deployment_status"],
+        "properties": {
+          "deployment_status": {"enum": ["pilot", "public"]}
+        }
+      },
+      "then": {
+        "properties": {
+          "claim_references": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "scope": {"const": "deployment"},
+                "claim_posture": {"enum": ["implemented", "partial"]}
+              },
+              "required": ["scope", "claim_posture"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "A retired lifecycle state needs verified evidence of the historical deployment or its current unavailability. Contradicted is allowed for the latter; proposed and unknown are not sufficient.",
+      "if": {
+        "required": ["deployment_status"],
+        "properties": {
+          "deployment_status": {"const": "retired"}
+        }
+      },
+      "then": {
+        "properties": {
+          "claim_references": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "scope": {"const": "deployment"},
+                "claim_posture": {"enum": ["implemented", "partial", "contradicted"]}
+              },
+              "required": ["scope", "claim_posture"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["audience_routes"],
+        "properties": {
+          "audience_routes": {
+            "contains": {"type": "object", "properties": {"mode": {"const": "evaluator"}}, "required": ["mode"]}
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "claim_references": {
+            "contains": {"type": "object", "properties": {"scope": {"const": "authorship"}}, "required": ["scope"]}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["repository_role"],
+        "properties": {
+          "repository_role": {"enum": ["mirror", "deployment-artifact"]}
+        }
+      },
+      "then": {"properties": {"documentation_class": {"const": "D"}}}
+    },
+    {
+      "if": {
+        "required": ["repository_role"],
+        "properties": {
+          "repository_role": {"enum": ["archive", "upstream-fork", "contribution"]}
+        }
+      },
+      "then": {"properties": {"documentation_class": {"const": "F"}}}
+    }
+  ]
+}

@@ -14,12 +14,12 @@ import hashlib
 import json
 import sys
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import rfc8785
 from jsonschema import Draft202012Validator, FormatChecker
-
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = ROOT / "schemas"
@@ -606,14 +606,59 @@ def _coverage_errors(data: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _assertion_errors(data: dict[str, Any]) -> list[str]:
-    if data.get("verification_state") != "verified":
-        return []
-
+def _assertion_errors(
+    data: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> list[str]:
     errors: list[str] = []
     evidence = data.get("evidence_references")
     if not isinstance(evidence, list):
         return errors
+    evidence_ids = [
+        item.get("evidence_id") for item in evidence if isinstance(item, dict)
+    ]
+    duplicate_evidence_ids = _duplicates(evidence_ids)
+    if duplicate_evidence_ids:
+        errors.append(
+            f"evidence_references contain duplicate evidence_id values: {duplicate_evidence_ids}"
+        )
+
+    freshness = data.get("freshness")
+    if isinstance(freshness, dict):
+        verified_at = freshness.get("verified_at")
+        parsed_verified_at: datetime | None = None
+        if isinstance(verified_at, str):
+            try:
+                candidate = datetime.fromisoformat(verified_at)
+            except ValueError:
+                candidate = None
+            if candidate is not None and candidate.tzinfo is not None:
+                parsed_verified_at = candidate.astimezone(UTC)
+        if parsed_verified_at is None:
+            errors.append(
+                "freshness.verified_at must be an ISO 8601 date-time with a timezone"
+            )
+        else:
+            validation_now = (now or datetime.now(UTC)).astimezone(UTC)
+            if parsed_verified_at > validation_now:
+                errors.append("freshness.verified_at cannot be in the future")
+            max_age_seconds = freshness.get("max_age_seconds")
+            if (
+                freshness.get("status") == "fresh"
+                and isinstance(max_age_seconds, int)
+                and not isinstance(max_age_seconds, bool)
+                and max_age_seconds > 0
+                and parsed_verified_at + timedelta(seconds=max_age_seconds)
+                < validation_now
+            ):
+                errors.append(
+                    "freshness.status 'fresh' is expired at validation time"
+                )
+
+    if data.get("verification_state") != "verified":
+        return errors
+
     groups = {
         item.get("independence_group")
         for item in evidence
@@ -623,14 +668,6 @@ def _assertion_errors(data: dict[str, Any]) -> list[str]:
         item.get("evidence_type") for item in evidence if isinstance(item, dict)
     }
     assertion_class = data.get("assertion_class")
-    evidence_ids = [
-        item.get("evidence_id") for item in evidence if isinstance(item, dict)
-    ]
-    duplicate_evidence_ids = _duplicates(evidence_ids)
-    if duplicate_evidence_ids:
-        errors.append(
-            f"evidence_references contain duplicate evidence_id values: {duplicate_evidence_ids}"
-        )
 
     if assertion_class == "external_fact" and len(groups) < 2:
         errors.append(
@@ -648,7 +685,6 @@ def _assertion_errors(data: dict[str, Any]) -> list[str]:
                 "a verified operator_directive is missing evidence types: "
                 + ", ".join(missing)
             )
-        freshness = data.get("freshness")
         if not isinstance(freshness, dict) or freshness.get("status") not in {
             "fresh",
             "not_applicable",
@@ -664,7 +700,6 @@ def _assertion_errors(data: dict[str, Any]) -> list[str]:
                 "a verified current_state is missing evidence types: "
                 + ", ".join(missing)
             )
-        freshness = data.get("freshness")
         if not isinstance(freshness, dict) or freshness.get("status") != "fresh":
             errors.append("a verified current_state requires freshness.status 'fresh'")
 
@@ -1506,7 +1541,7 @@ def _governance_snapshot_bundle_errors(data: dict[str, Any]) -> list[str]:
     return errors
 
 
-def semantic_errors(data: Any) -> list[str]:
+def semantic_errors(data: Any, *, now: datetime | None = None) -> list[str]:
     """Return contract-specific semantic invariant failures."""
     if not isinstance(data, dict):
         return []
@@ -1532,7 +1567,7 @@ def semantic_errors(data: Any) -> list[str]:
     if contract_name == "coverage-receipt.v1":
         return _coverage_errors(data)
     if contract_name == "assertion-evidence.v1":
-        return _assertion_errors(data)
+        return _assertion_errors(data, now=now)
     if contract_name == "parameter-contract.v1":
         return _parameter_errors(data)
     if contract_name == "lineage-graph.v1":

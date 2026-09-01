@@ -1,5 +1,6 @@
 """Test JSON Schema definitions against example files."""
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -7,6 +8,8 @@ from pathlib import Path
 
 import jsonschema
 import yaml
+
+from scripts.schema_formats import FORMAT_CHECKER
 
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
@@ -18,7 +21,10 @@ def load_schema(name: str) -> dict:
 
 
 def validate(data: dict, schema: dict) -> list[str]:
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=FORMAT_CHECKER,
+    )
     return [e.message for e in validator.iter_errors(data)]
 
 
@@ -61,6 +67,311 @@ class TestRegistrySchema:
         }
         errors = validate(data, schema)
         assert len(errors) > 0
+
+
+class TestProjectRecordSchema:
+    def test_implementation_status_definitions_are_normative(self):
+        schema = load_schema("project-record-v1.schema.json")
+        statuses = {
+            item["const"]: item["description"]
+            for item in schema["properties"]["implementation_status"]["oneOf"]
+        }
+        assert set(statuses) == {
+            "ACTIVE",
+            "PROTOTYPE",
+            "SKELETON",
+            "DESIGN_ONLY",
+            "ARCHIVED",
+        }
+        assert "does not imply deployment" in statuses["ACTIVE"]
+        assert "little substantive domain behavior" in statuses["SKELETON"]
+        assert "without substantive executable domain behavior" in statuses["DESIGN_ONLY"]
+
+    def test_claim_scope_vocabulary_is_normative(self):
+        schema = load_schema("project-record-v1.schema.json")
+        scopes = {
+            item["const"]: item["description"]
+            for item in schema["$defs"]["claim_reference"]["properties"]["scope"][
+                "oneOf"
+            ]
+        }
+        assert set(scopes) == {
+            "identity",
+            "status",
+            "capability",
+            "authorship",
+            "deployment",
+            "adoption",
+            "performance",
+            "outcome",
+            "limitation",
+            "rights",
+            "provenance",
+        }
+
+    def test_example_validates(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        assert validate(data, schema) == []
+
+    def test_class_a_requires_all_five_routes(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["documentation_class"] = "A"
+        assert validate(data, schema)
+
+    def test_deployed_industry_requires_claim_reference(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["industries"] = [{"name": "Education", "status": "deployed"}]
+        errors = validate(data, schema)
+        assert any("claim_references" in error for error in errors)
+
+    def test_invalid_uri_and_timestamps_fail_format_validation(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["links"]["project_page"] = "not a URI"
+        data["generated_at"] = "not a timestamp"
+        data["verified_at"] = "2026-08-31"
+
+        errors = validate(data, schema)
+        assert any("uri" in error for error in errors)
+        assert sum("date-time" in error for error in errors) == 2
+
+    def test_class_a_requires_evidence_link(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["documentation_class"] = "A"
+        data["audience_routes"] = [
+            *data["audience_routes"],
+            {
+                "mode": "humanities",
+                "path": "docs/audiences/humanities.md",
+                "primary_question": "What concepts and traditions does it engage?",
+                "surface": "public",
+            },
+            {
+                "mode": "business",
+                "path": "docs/audiences/business.md",
+                "primary_question": "What operational problem does it address?",
+                "surface": "public",
+            },
+        ]
+        del data["links"]["evidence"]
+
+        assert any("evidence" in error for error in validate(data, schema))
+
+    def test_class_b_requires_evidence_link(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        del data["links"]["evidence"]
+
+        assert any("evidence" in error for error in validate(data, schema))
+
+    def test_link_policy_allows_local_or_http_docs_and_rejects_other_schemes(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        for key in ("documentation", "evidence"):
+            for invalid in ("javascript:alert(1)", "mailto:docs@example.test", "/tmp/doc.md"):
+                candidate = yaml.safe_load(yaml.safe_dump(baseline))
+                candidate["links"][key] = invalid
+                assert validate(candidate, schema), (key, invalid)
+
+        remote = yaml.safe_load(yaml.safe_dump(baseline))
+        remote["links"]["documentation"] = "https://docs.example.test/project"
+        remote["links"]["evidence"] = "http://evidence.example.test/record"
+        assert validate(remote, schema) == []
+
+        invalid_web = yaml.safe_load(yaml.safe_dump(baseline))
+        invalid_web["links"]["project_page"] = "urn:project:example"
+        invalid_web["redirect"] = {
+            "status": "planned",
+            "target": "javascript:alert(1)",
+        }
+        errors = validate(invalid_web, schema)
+        assert len(errors) >= 2
+
+    def test_class_d_and_deployment_role_require_redirect(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+        class_d = {
+            **baseline,
+            "repository_role": "deployment-artifact",
+            "documentation_class": "D",
+            "audience_routes": [],
+        }
+        for candidate in (
+            class_d,
+            {**baseline, "repository_role": "deployment-artifact"},
+        ):
+            assert any("redirect" in error for error in validate(candidate, schema))
+
+        class_d["redirect"] = {
+            "status": "active",
+            "target": "https://github.com/organvm/example-project",
+        }
+        assert validate(class_d, schema) == []
+
+        canonical_class_d = {**class_d, "repository_role": "canonical"}
+        assert any("canonical" in error for error in validate(canonical_class_d, schema))
+
+    def test_class_f_requires_provenance_and_status_claims(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["documentation_class"] = "F"
+        data["audience_routes"] = []
+
+        errors = validate(data, schema)
+        assert len([error for error in errors if "does not contain" in error]) >= 1
+
+        data["claim_references"] = []
+        for scope in ("provenance", "status"):
+            claim = {
+                **yaml.safe_load(
+                    (EXAMPLES_DIR / "project-record-v1-example.yaml").read_text(),
+                )["claim_references"][0],
+                "id": f"archive-{scope}",
+                "scope": scope,
+            }
+            data["claim_references"].append(claim)
+        assert "redirect" not in data
+        assert validate(data, schema) == []
+
+    def test_classes_d_and_f_reject_separate_audience_routes(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+        for doc_class in ("D", "F"):
+            candidate = {**baseline, "documentation_class": doc_class}
+            assert any("expected to be empty" in error for error in validate(candidate, schema))
+
+    def test_remote_assertion_reference_fails(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["claim_references"][0]["assertion_ref"] = (
+            "https://example.invalid/assertion.json"
+        )
+
+        assert validate(data, schema)
+
+    def test_claim_posture_is_required_and_bounded(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+        del baseline["claim_references"][0]["claim_posture"]
+        assert any("claim_posture" in error for error in validate(baseline, schema))
+
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            invalid = yaml.safe_load(f)
+        invalid["claim_references"][0]["claim_posture"] = "verified"
+        assert any("one of" in error for error in validate(invalid, schema))
+
+    def test_status_deployment_and_evaluator_claim_coverage(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        no_status = yaml.safe_load(yaml.safe_dump(baseline))
+        no_status["claim_references"] = [
+            claim for claim in no_status["claim_references"] if claim["scope"] != "status"
+        ]
+        assert validate(no_status, schema)
+
+        public = yaml.safe_load(yaml.safe_dump(baseline))
+        public["deployment_status"] = "public"
+        assert validate(public, schema)
+
+        no_authorship = yaml.safe_load(yaml.safe_dump(baseline))
+        no_authorship["claim_references"] = [
+            claim
+            for claim in no_authorship["claim_references"]
+            if claim["scope"] != "authorship"
+        ]
+        assert validate(no_authorship, schema)
+
+    def test_deployment_lifecycle_requires_a_bounded_claim_posture(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        def candidate(status: str, posture: str) -> dict:
+            data = yaml.safe_load(yaml.safe_dump(baseline))
+            deployment_claim = {
+                **data["claim_references"][0],
+                "id": "deployment-lifecycle",
+                "scope": "deployment",
+                "claim_posture": posture,
+            }
+            data["deployment_status"] = status
+            data["claim_references"].append(deployment_claim)
+            return data
+
+        for status in ("pilot", "public"):
+            assert validate(candidate(status, "proposed"), schema)
+            assert validate(candidate(status, "unknown"), schema)
+            assert validate(candidate(status, "partial"), schema) == []
+            assert validate(candidate(status, "implemented"), schema) == []
+
+        assert validate(candidate("retired", "proposed"), schema)
+        assert validate(candidate("retired", "unknown"), schema)
+        for posture in ("implemented", "partial", "contradicted"):
+            assert validate(candidate("retired", posture), schema) == []
+
+    def test_role_class_matrix_is_conservative(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+        for role, required_class in (
+            ("mirror", "D"),
+            ("deployment-artifact", "D"),
+            ("archive", "F"),
+            ("upstream-fork", "F"),
+            ("contribution", "F"),
+        ):
+            candidate = yaml.safe_load(yaml.safe_dump(baseline))
+            candidate["repository_role"] = role
+            assert any(required_class in error for error in validate(candidate, schema)), role
+
+    def test_limitation_assertion_id_and_reference_are_paired(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+        for field, value in (
+            ("assertion_ref", "docs/evidence/claims/status.json"),
+            ("assertion_id", "project_record_fixture_status"),
+        ):
+            candidate = yaml.safe_load(yaml.safe_dump(baseline))
+            candidate["limitations"][0][field] = value
+            assert validate(candidate, schema)
+
+    def test_example_fixture_paths_and_evidence_hash_resolve(self):
+        fixture_root = EXAMPLES_DIR / "project-record-v1-fixture"
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        for route in data["audience_routes"]:
+            assert (fixture_root / route["path"]).is_file()
+        assert (fixture_root / data["links"]["documentation"]).is_file()
+        assert (fixture_root / data["links"]["evidence"]).is_file()
+
+        for claim in data["claim_references"]:
+            assertion_path = fixture_root / claim["assertion_ref"]
+            assertion = json.loads(assertion_path.read_text(encoding="utf-8"))
+            assert assertion["assertion_id"] == claim["assertion_id"]
+            for evidence in assertion["evidence_references"]:
+                evidence_path = fixture_root / evidence["reference"]
+                digest = "sha256:" + hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+                assert evidence["body_hash"] == digest
 
 
 class TestSeedSchema:

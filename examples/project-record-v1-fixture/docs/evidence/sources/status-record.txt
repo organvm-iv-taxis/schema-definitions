@@ -1,0 +1,1 @@
+At fixture generation, the example project record classifies the implementation as a prototype and the deployment as not deployed.

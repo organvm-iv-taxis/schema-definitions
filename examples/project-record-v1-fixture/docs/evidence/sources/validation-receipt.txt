@@ -1,0 +1,1 @@
+The reader-mode project record fixture has three committed audience routes and one committed evidence record.

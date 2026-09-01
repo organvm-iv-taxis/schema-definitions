@@ -5,6 +5,7 @@ Usage:
     python scripts/validate.py registry-v2.json
     python scripts/validate.py seed.yaml
     python scripts/validate.py --all-examples
+    python scripts/validate.py --ignore-missing optional-example.json
 """
 
 import argparse
@@ -23,11 +24,17 @@ try:
 except ImportError:
     yaml = None
 
+if __package__:
+    from .schema_formats import FORMAT_CHECKER
+else:
+    from schema_formats import FORMAT_CHECKER
+
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
 # Map file name patterns to schemas
 SCHEMA_MAP = {
+    "project-record": "project-record-v1.schema.json",
     "governance-snapshot-bundle": "governance-snapshot-bundle.v1.schema.json",
     "governance-cadence-receipt": "governance-cadence-receipt.v1.schema.json",
     "governance-stage-receipt": "governance-stage-receipt.v1.schema.json",
@@ -113,7 +120,10 @@ def validate_file(filepath: Path, schema_path: Path | None = None) -> tuple[bool
     with open(schema_path) as f:
         schema = json.load(f)
 
-    validator = jsonschema.Draft202012Validator(schema)
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=FORMAT_CHECKER,
+    )
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
 
     messages = []
@@ -131,6 +141,11 @@ def main():
                         help="Explicit schema file to use")
     parser.add_argument("--all-examples", action="store_true",
                         help="Validate all example files")
+    parser.add_argument(
+        "--ignore-missing",
+        action="store_true",
+        help="Skip missing explicit paths instead of failing validation",
+    )
     args = parser.parse_args()
 
     targets = []
@@ -149,7 +164,11 @@ def main():
 
     for filepath in targets:
         if not filepath.exists():
-            print(f"SKIP {filepath}: not found")
+            if args.ignore_missing:
+                print(f"SKIP {filepath}: not found")
+            else:
+                print(f"FAIL {filepath}: not found")
+                total_fail += 1
             continue
 
         ok, errors = validate_file(filepath, schema_override)

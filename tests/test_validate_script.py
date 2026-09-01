@@ -8,7 +8,6 @@ import pytest
 
 from scripts import validate as validate_script
 
-
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = ROOT / "schemas"
 
@@ -126,7 +125,11 @@ def test_main_without_targets_prints_help_and_succeeds(monkeypatch, capsys):
     assert "Validate files against JSON Schema" in captured.out
 
 
-def test_main_skips_missing_files_and_counts_existing_passes(tmp_path, monkeypatch, capsys):
+def test_main_fails_missing_explicit_files_and_counts_existing_passes(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     target = tmp_path / "contract.json"
     missing = tmp_path / "missing.json"
     target.write_text(
@@ -153,10 +156,25 @@ def test_main_skips_missing_files_and_counts_existing_passes(tmp_path, monkeypat
         missing,
     )
 
-    assert exit_code == 0
+    assert exit_code == 1
     assert "PASS contract.json" in captured.out
+    assert f"FAIL {missing}: not found" in captured.out
+    assert "1 passed, 1 failed" in captured.out
+
+
+def test_main_can_explicitly_ignore_missing_files(tmp_path, monkeypatch, capsys):
+    missing = tmp_path / "optional.json"
+
+    exit_code, captured = run_main(
+        monkeypatch,
+        capsys,
+        "--ignore-missing",
+        missing,
+    )
+
+    assert exit_code == 0
     assert f"SKIP {missing}: not found" in captured.out
-    assert "1 passed, 0 failed" in captured.out
+    assert "0 passed, 0 failed" in captured.out
 
 
 def test_main_returns_failure_and_prints_validation_errors(tmp_path, monkeypatch, capsys):

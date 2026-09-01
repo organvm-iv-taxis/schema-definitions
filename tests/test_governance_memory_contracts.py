@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import rfc8785
@@ -15,7 +16,6 @@ from scripts.validate_governance_memory import (
     semantic_errors,
     validate_document,
 )
-
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = ROOT / "schemas"
@@ -289,6 +289,44 @@ def test_verified_operator_directive_requires_source_event_and_ratification():
     data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
     data["assertion_class"] = "operator_directive"
     assert semantic_errors(data)
+
+
+def test_duplicate_evidence_ids_fail_in_every_verification_state():
+    baseline = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    baseline["evidence_references"][1]["evidence_id"] = baseline[
+        "evidence_references"
+    ][0]["evidence_id"]
+
+    expected = "evidence_references contain duplicate evidence_id values"
+    for state in ("unverified", "verified", "stale", "disputed"):
+        candidate = copy.deepcopy(baseline)
+        candidate["verification_state"] = state
+        assert any(expected in error for error in semantic_errors(candidate)), state
+
+
+def test_assertion_freshness_rejects_future_and_expired_receipts():
+    baseline = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    validation_now = datetime(2026, 8, 31, 13, 0, tzinfo=UTC)
+
+    baseline["freshness"] = {
+        "verified_at": "2026-08-31T14:00:00Z",
+        "max_age_seconds": 7200,
+        "status": "fresh",
+    }
+    assert "freshness.verified_at cannot be in the future" in semantic_errors(
+        baseline,
+        now=validation_now,
+    )
+
+    baseline["freshness"] = {
+        "verified_at": "2026-08-31T10:00:00Z",
+        "max_age_seconds": 60,
+        "status": "fresh",
+    }
+    assert "freshness.status 'fresh' is expired at validation time" in semantic_errors(
+        baseline,
+        now=validation_now,
+    )
 
 
 def test_ratified_operator_directive_accepts_event_bound_freshness():

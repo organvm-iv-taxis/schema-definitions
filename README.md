@@ -6,6 +6,7 @@ Canonical JSON Schema definitions for the organvm eight-organ system's data cont
 
 | Schema | Validates | Source of Truth |
 |--------|-----------|-----------------|
+| `project-record-v1.schema.json` | Canonical identity, state, authorship, assertion references, reader routes, and search intent for one repository project | Reader-mode documentation contract |
 | `registry-v2.schema.json` | `registry-v2.json` | Repository state across all 8 organs |
 | `seed-v1.schema.json` | `seed.yaml` | Per-repo automation contracts |
 | `governance-rules.schema.json` | `governance-rules.json` | Dependency rules, promotion state machine |
@@ -25,6 +26,7 @@ embed a provider catalog or deployment-specific path.
 
 | Contract | Responsibility |
 |----------|----------------|
+| `project-record-v1.schema.json` | One project's invariant facts and audience projections, linked to assertion-evidence records |
 | `source-envelope.v1.schema.json` | Provider-neutral source identity, authority, raw-unit content binding, and private custody pointer |
 | `lineage-graph.v1.schema.json` | Separate operator-intent and artifact timelines with reviewed typed edges |
 | `governance-testament.v1.schema.json` | Ratified directives, layers, instruments, ideals, predicates, and citations |
@@ -43,6 +45,19 @@ embed a provider catalog or deployment-specific path.
 | `governance-cadence-receipt.v1.schema.json` | Ordered nine-stage receipt chain and fixed-point evidence |
 | `governance-atlas-receipt.v1.schema.json` | Assertion, ideal, self-image, timeline, zoom, and Atlas readiness |
 | `governance-snapshot-bundle.v1.schema.json` | Frozen cross-owner bundle with two-run and post-proof idempotence |
+
+For `project-record.v1`, a `pilot` or `public` deployment state is established
+only by an `implemented` or `partial` deployment claim that resolves to a
+verified assertion. A `retired` state still requires verified evidence, but its
+qualifying claim may also be `contradicted` when the evidence establishes that
+the former deployment is now unavailable. `proposed` and `unknown` claims never
+establish any of those three lifecycle states.
+
+Class D records are noncanonical delivery surfaces and therefore use either the
+`deployment-artifact` or `mirror` repository role. Their
+`canonical_repository` and redirect target identify the same upstream
+repository; CI supplies the checked-out owner/name to the integrity runtime so
+that target must be distinct from the delivery checkout.
 
 `exact_all` means complete classification of the declared denominator. It does
 not mean ready. Wherever a contract exposes `readiness`, `ready` additionally
@@ -91,6 +106,13 @@ pip install -e ".[dev]"
 
 Requires: Python 3.11+, `jsonschema`, `pyyaml`.
 
-## Part of the Eight-Organ System
+## Authority and schema identifiers
 
-This repo belongs to **meta-organvm** (ORGAN VIII) and provides the data contracts that `organvm-engine` validates against.
+The canonical GitHub authority for this repository is
+[`organvm-iv-taxis/schema-definitions`](https://github.com/organvm-iv-taxis/schema-definitions).
+It provides system-wide data contracts validated by `organvm-engine`.
+
+Some pre-existing schemas retain `$id` values under the historical
+`meta-organvm.github.io` namespace. Those identifiers remain stable for
+compatibility; they are schema identifiers, not a statement of current GitHub
+ownership. New contracts use the current canonical authority namespace.

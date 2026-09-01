@@ -1,0 +1,17 @@
+{
+  "contract_name": "assertion-evidence.v1",
+  "contract_version": 1,
+  "assertion_id": "project_record_fixture_structural_validation",
+  "assertion_class": "historical_record",
+  "statement": "The project-record fixture includes committed reader routes and a local evidence artifact.",
+  "verification_state": "verified",
+  "evidence_references": [
+    {
+      "evidence_id": "project_record_fixture_receipt",
+      "independence_group": "project-record-fixture",
+      "evidence_type": "artifact",
+      "reference": "docs/evidence/sources/validation-receipt.txt",
+      "body_hash": "sha256:98589d618ba8ccdfb1ee2ba964e3406ba6b3340246d69f6d594ac28f9704eb20"
+    }
+  ]
+}
