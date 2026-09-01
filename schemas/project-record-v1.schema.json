@@ -128,7 +128,8 @@
     },
     "audience_routes": {
       "type": "array",
-      "description": "Audience editions. Modes and repository-relative paths must each be unique; the runtime validator enforces property-level path uniqueness.",
+      "description": "Audience editions. Modes and repository-relative paths must each be unique; the runtime validator enforces both property-level uniqueness rules.",
+      "uniqueItems": true,
       "items": {"$ref": "#/$defs/audience_route"}
     },
     "industries": {
@@ -204,8 +205,8 @@
     "contained_local_ref": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
-      "description": "Canonical POSIX repository-relative path that does not contain a URI scheme, absolute root, backslash separator, empty segment, current-directory segment, or parent traversal."
+      "pattern": "^(?!.*\\u0000)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
+      "description": "Canonical POSIX repository-relative path that does not contain NUL, a URI scheme, absolute root, backslash separator, empty segment, current-directory segment, or parent traversal."
     },
     "assertion_local_ref": {
       "allOf": [{"$ref": "#/$defs/contained_local_ref"}],

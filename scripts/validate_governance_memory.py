@@ -630,7 +630,12 @@ def _assertion_errors(
         parsed_verified_at: datetime | None = None
         if isinstance(verified_at, str):
             try:
-                candidate = datetime.fromisoformat(verified_at)
+                normalized_verified_at = (
+                    f"{verified_at[:-1]}+00:00"
+                    if verified_at.endswith(("Z", "z"))
+                    else verified_at
+                )
+                candidate = datetime.fromisoformat(normalized_verified_at)
             except ValueError:
                 candidate = None
             if candidate is not None and candidate.tzinfo is not None:

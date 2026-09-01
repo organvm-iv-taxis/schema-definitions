@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import jsonschema
 import yaml
@@ -20,7 +21,7 @@ def load_schema(name: str) -> dict:
         return json.load(f)
 
 
-def validate(data: dict, schema: dict) -> list[str]:
+def validate(data: Any, schema: dict) -> list[str]:
     validator = jsonschema.Draft202012Validator(
         schema,
         format_checker=FORMAT_CHECKER,
@@ -146,6 +147,20 @@ class TestProjectRecordSchema:
         errors = validate(data, schema)
         assert any("uri" in error for error in errors)
         assert sum("date-time" in error for error in errors) == 2
+
+    def test_malformed_uri_authority_is_a_validation_error_not_an_exception(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["links"]["project_page"] = "http://["
+
+        assert any("uri" in error for error in validate(data, schema))
+
+    def test_generic_uri_accepts_authority_without_a_path(self):
+        schema = {"type": "string", "format": "uri"}
+
+        for value in ("custom://registry", "file://registry-host"):
+            assert validate(value, schema) == []
 
     def test_timestamps_require_the_documented_rfc3339_subset(self):
         schema = load_schema("project-record-v1.schema.json")
@@ -297,10 +312,19 @@ class TestProjectRecordSchema:
             r"docs\..\status.json",
             "docs/./status.json",
             "docs//status.json",
+            "docs/evidence/\x00status.json",
         ):
             candidate = yaml.safe_load(yaml.safe_dump(baseline))
             candidate["claim_references"][0]["assertion_ref"] = invalid
             assert validate(candidate, schema), invalid
+
+    def test_exact_duplicate_audience_routes_fail_schema_validation(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            data = yaml.safe_load(f)
+        data["audience_routes"][1] = dict(data["audience_routes"][0])
+
+        assert any("non-unique" in error for error in validate(data, schema))
 
     def test_claim_posture_is_required_and_bounded(self):
         schema = load_schema("project-record-v1.schema.json")

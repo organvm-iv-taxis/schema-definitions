@@ -109,6 +109,52 @@ def load_data(filepath: Path) -> dict:
         return json.load(f)
 
 
+def _duplicate_strings(values: list[str]) -> list[str]:
+    """Return duplicate strings once each, in deterministic order."""
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    return sorted(duplicates)
+
+
+def project_record_semantic_errors(data: object) -> list[str]:
+    """Validate project-record invariants JSON Schema cannot express."""
+    if not isinstance(data, dict):
+        return []
+    routes = data.get("audience_routes")
+    if not isinstance(routes, list):
+        return []
+
+    modes = [
+        route["mode"]
+        for route in routes
+        if isinstance(route, dict) and isinstance(route.get("mode"), str)
+    ]
+    paths = [
+        route["path"]
+        for route in routes
+        if isinstance(route, dict) and isinstance(route.get("path"), str)
+    ]
+
+    errors: list[str] = []
+    duplicate_modes = _duplicate_strings(modes)
+    if duplicate_modes:
+        errors.append(
+            "  audience_routes: duplicate mode values: "
+            + ", ".join(duplicate_modes)
+        )
+    duplicate_paths = _duplicate_strings(paths)
+    if duplicate_paths:
+        errors.append(
+            "  audience_routes: duplicate path values: "
+            + ", ".join(duplicate_paths)
+        )
+    return errors
+
+
 def validate_file(filepath: Path, schema_path: Path | None = None) -> tuple[bool, list[str]]:
     """Validate a file against a JSON Schema. Returns (pass, errors)."""
     if schema_path is None:
@@ -131,7 +177,10 @@ def validate_file(filepath: Path, schema_path: Path | None = None) -> tuple[bool
         path = ".".join(str(p) for p in err.absolute_path) or "(root)"
         messages.append(f"  {path}: {err.message}")
 
-    return len(errors) == 0, messages
+    if schema_path.name == "project-record-v1.schema.json":
+        messages.extend(project_record_semantic_errors(data))
+
+    return len(messages) == 0, messages
 
 
 def main():

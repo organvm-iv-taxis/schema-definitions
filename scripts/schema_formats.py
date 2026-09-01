@@ -24,12 +24,18 @@ def is_uri(value: object) -> bool:
         return True
     if any(character.isspace() for character in value):
         return False
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        # Malformed bracketed authorities (for example ``http://[``) raise
+        # instead of returning a SplitResult.  Format validation must remain a
+        # bounded predicate rather than aborting an entire validation batch.
+        return False
     if not parsed.scheme or not _SCHEME.fullmatch(parsed.scheme):
         return False
     if parsed.scheme in {"http", "https"}:
         return bool(parsed.netloc)
-    return bool(parsed.path)
+    return bool(parsed.netloc or parsed.path)
 
 
 @FORMAT_CHECKER.checks("date-time")

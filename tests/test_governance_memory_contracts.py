@@ -329,6 +329,20 @@ def test_assertion_freshness_rejects_future_and_expired_receipts():
     )
 
 
+def test_assertion_freshness_accepts_lowercase_utc_suffix():
+    data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    data["freshness"] = {
+        "verified_at": "2026-08-31T10:00:00z",
+        "status": "not_applicable",
+    }
+
+    assert validate_document(data) == ([], [])
+    assert semantic_errors(
+        data,
+        now=datetime(2026, 8, 31, 13, 0, tzinfo=UTC),
+    ) == []
+
+
 def test_ratified_operator_directive_accepts_event_bound_freshness():
     data = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
     data["assertion_class"] = "operator_directive"

@@ -118,6 +118,65 @@ def test_validate_file_formats_nested_errors_in_path_order(tmp_path):
     assert "less than the minimum" in errors[1]
 
 
+def test_project_record_semantics_reject_duplicate_route_modes_and_paths(tmp_path):
+    example = validate_script.EXAMPLES_DIR / "project-record-v1-example.yaml"
+    baseline = validate_script.load_data(example)
+
+    duplicate_mode = json.loads(json.dumps(baseline))
+    duplicate_mode["audience_routes"][1]["mode"] = duplicate_mode[
+        "audience_routes"
+    ][0]["mode"]
+
+    duplicate_path = json.loads(json.dumps(baseline))
+    duplicate_path["audience_routes"][1]["path"] = duplicate_path[
+        "audience_routes"
+    ][0]["path"]
+
+    for name, candidate, expected in (
+        ("mode", duplicate_mode, "duplicate mode values: general"),
+        (
+            "path",
+            duplicate_path,
+            "duplicate path values: docs/audiences/general.md",
+        ),
+    ):
+        target = tmp_path / f"project-record-duplicate-{name}.json"
+        target.write_text(json.dumps(candidate))
+
+        ok, errors = validate_script.validate_file(target)
+
+        assert ok is False
+        assert any(expected in error for error in errors)
+
+
+def test_malformed_project_uri_does_not_abort_later_batch_targets(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    example = validate_script.EXAMPLES_DIR / "project-record-v1-example.yaml"
+    baseline = validate_script.load_data(example)
+    malformed = json.loads(json.dumps(baseline))
+    malformed["links"]["project_page"] = "http://["
+
+    malformed_path = tmp_path / "project-record-malformed.json"
+    valid_path = tmp_path / "project-record-valid.json"
+    malformed_path.write_text(json.dumps(malformed))
+    valid_path.write_text(json.dumps(baseline))
+
+    exit_code, captured = run_main(
+        monkeypatch,
+        capsys,
+        malformed_path,
+        valid_path,
+    )
+
+    assert exit_code == 1
+    assert "FAIL project-record-malformed.json" in captured.out
+    assert "is not a 'uri'" in captured.out
+    assert "PASS project-record-valid.json" in captured.out
+
+
 def test_main_without_targets_prints_help_and_succeeds(monkeypatch, capsys):
     exit_code, captured = run_main(monkeypatch, capsys)
 
