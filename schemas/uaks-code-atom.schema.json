@@ -9,7 +9,7 @@
     "atomId": {
       "type": "string",
       "description": "Unique content-addressed identifier for this code atom.",
-      "pattern": "^ca_[a-zA-Z0-9_-]+$"
+      "pattern": "^ca_[a-zA-Z0-9_-]+$(?![\\s\\S])"
     },
     "atomFamily": {
       "type": "string",
@@ -52,7 +52,7 @@
     "contentHash": {
       "type": "string",
       "description": "SHA-256 hash of the content field.",
-      "pattern": "^[a-f0-9]{64}$"
+      "pattern": "^[a-f0-9]{64}$(?![\\s\\S])"
     },
     "sourceRef": {
       "type": "string",

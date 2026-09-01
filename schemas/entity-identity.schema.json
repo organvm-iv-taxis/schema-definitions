@@ -8,7 +8,7 @@
   "properties": {
     "uid": {
       "type": "string",
-      "pattern": "^ent_[a-z]+_[0-9A-HJKMNP-TV-Z]{26}$",
+      "pattern": "^ent_[a-z]+_[0-9A-HJKMNP-TV-Z]{26}$(?![\\s\\S])",
       "description": "Permanent entity identifier: ent_{type_prefix}_{ulid}"
     },
     "entity_type": {

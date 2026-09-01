@@ -13,11 +13,11 @@
     "contract_name": {"const": "governance-testament.v1"},
     "contract_version": {"const": 1},
     "testament_id": {"type": "string", "minLength": 1},
-    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$(?![\\s\\S])"},
     "title": {"type": "string", "minLength": 1},
     "status": {"type": "string", "enum": ["draft", "candidate", "ratified", "superseded"]},
     "directive": {"type": "string", "minLength": 1},
-    "directive_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "directive_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"},
     "layers": {
       "type": "array",
       "minItems": 3,
@@ -79,7 +79,7 @@
       ],
       "properties": {
         "ratified_at": {"type": "string", "format": "date-time"},
-        "candidate_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "candidate_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"},
         "controlling_formulation": {"type": "string", "minLength": 1},
         "assertion_evidence_reference": {"type": "string", "minLength": 1},
         "authority_events": {
@@ -96,11 +96,11 @@
               "content_hash"
             ],
             "properties": {
-              "event_id": {"type": "string", "pattern": "^evt_[a-f0-9]{64}$"},
+              "event_id": {"type": "string", "pattern": "^evt_[a-f0-9]{64}$(?![\\s\\S])"},
               "source_envelope_reference": {"type": "string", "minLength": 1},
               "role": {"const": "operator"},
               "authority_class": {"const": "operator_intent"},
-              "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+              "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"}
             },
             "additionalProperties": false
           }

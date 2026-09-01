@@ -9,7 +9,7 @@
     "event": {
       "type": "string",
       "description": "Event type (e.g., governance.updated, health-audit.completed, theory.published)",
-      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$(?![\\s\\S])"
     },
     "source": { "$ref": "#/$defs/endpoint" },
     "target": { "$ref": "#/$defs/endpoint" },

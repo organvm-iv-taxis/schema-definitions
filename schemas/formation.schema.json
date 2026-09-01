@@ -20,7 +20,7 @@
   "properties": {
     "formation_id": {
       "type": "string",
-      "pattern": "^FORM-\\d{3}$",
+      "pattern": "^FORM-\\d{3}$(?![\\s\\S])",
       "description": "Unique formation identifier (e.g., FORM-001)"
     },
     "formation_name": {
@@ -72,7 +72,7 @@
     },
     "maturity_level": {
       "type": "string",
-      "pattern": "^R[0-8]$",
+      "pattern": "^R[0-8]$(?![\\s\\S])",
       "description": "Top-Down Refinement Pipeline maturity level (R0 vision through R8 evolution law)"
     },
     "promotion_state": {

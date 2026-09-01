@@ -29,6 +29,40 @@ def validate(data: Any, schema: dict) -> list[str]:
     return [e.message for e in validator.iter_errors(data)]
 
 
+def _patterns(value: Any):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "pattern" and isinstance(item, str):
+                yield item
+            yield from _patterns(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _patterns(item)
+
+
+def test_all_anchored_schema_patterns_require_absolute_end_of_input():
+    hardened_suffix = r"$(?![\s\S])"
+    anchored_patterns = []
+    for schema_path in SCHEMAS_DIR.glob("*.json"):
+        anchored_patterns.extend(
+            pattern for pattern in _patterns(load_schema(schema_path.name)) if "$" in pattern
+        )
+    assert anchored_patterns
+    assert all(pattern.endswith(hardened_suffix) for pattern in anchored_patterns)
+
+
+def test_digest_patterns_reject_final_newlines_across_contracts():
+    source = json.loads((EXAMPLES_DIR / "source-envelope-v1-example.json").read_text())
+    source["body_hash"] += "\n"
+    assert validate(source, load_schema("source-envelope.v1.schema.json"))
+
+    coverage = json.loads(
+        (EXAMPLES_DIR / "coverage-receipt-v1-example.json").read_text()
+    )
+    coverage["receipt_hash"] += "\n"
+    assert validate(coverage, load_schema("coverage-receipt.v1.schema.json"))
+
+
 class TestRegistrySchema:
     def test_example_validates(self):
         schema = load_schema("registry-v2.schema.json")
@@ -207,6 +241,45 @@ class TestProjectRecordSchema:
             candidate = yaml.safe_load(yaml.safe_dump(baseline))
             candidate["generated_at"] = invalid
             assert any("date-time" in error for error in validate(candidate, schema)), invalid
+
+    def test_project_identifiers_and_local_paths_reject_final_newlines(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        candidates = []
+        project_id = yaml.safe_load(yaml.safe_dump(baseline))
+        project_id["project_id"] += "\n"
+        candidates.append(project_id)
+
+        claim_id = yaml.safe_load(yaml.safe_dump(baseline))
+        claim_id["claim_references"][0]["id"] += "\n"
+        candidates.append(claim_id)
+
+        repository = yaml.safe_load(yaml.safe_dump(baseline))
+        repository["canonical_repository"] += "\n"
+        candidates.append(repository)
+
+        route_path = yaml.safe_load(yaml.safe_dump(baseline))
+        route_path["audience_routes"][0]["path"] += "\n"
+        candidates.append(route_path)
+
+        repository_link = yaml.safe_load(yaml.safe_dump(baseline))
+        repository_link["links"]["repository"] += "\n"
+        candidates.append(repository_link)
+
+        documentation_link = yaml.safe_load(yaml.safe_dump(baseline))
+        documentation_link["links"]["documentation"] = (
+            "https://docs.example.test/project\n"
+        )
+        candidates.append(documentation_link)
+
+        demo_link = yaml.safe_load(yaml.safe_dump(baseline))
+        demo_link["links"]["demo"] = "https://demo.example.test/project\n"
+        candidates.append(demo_link)
+
+        for candidate in candidates:
+            assert validate(candidate, schema)
 
     def test_class_a_requires_evidence_link(self):
         schema = load_schema("project-record-v1.schema.json")

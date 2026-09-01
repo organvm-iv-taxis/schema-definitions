@@ -39,7 +39,7 @@
         "repo": { "type": "string" },
         "organ": {
           "type": "string",
-          "pattern": "^(ORGAN-[IVX]+|META-ORGANVM)$"
+          "pattern": "^(ORGAN-[IVX]+|META-ORGANVM)$(?![\\s\\S])"
         },
         "entity_path": { "type": "string" },
         "entity_type": {

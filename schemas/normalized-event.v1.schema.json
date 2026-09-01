@@ -28,7 +28,7 @@
     "contract_version": {"const": 1},
     "event_id": {
       "type": "string",
-      "pattern": "^evt_[a-f0-9]{64}$"
+      "pattern": "^evt_[a-f0-9]{64}$(?![\\s\\S])"
     },
     "identity_algorithm": {
       "const": "sha256-canonical-json-native-identity-role-content-v1"
@@ -59,7 +59,7 @@
       "description": "Snapshot binding only; excluded from event identity."
     },
     "snapshot_digest": {"$ref": "#/$defs/digest"},
-    "raw_unit_id": {"type": "string", "pattern": "^raw_[A-Za-z0-9_-]+$"},
+    "raw_unit_id": {"type": "string", "pattern": "^raw_[A-Za-z0-9_-]+$(?![\\s\\S])"},
     "raw_unit_content_hash": {
       "$ref": "#/$defs/digest",
       "description": "Immutable content identity of the census raw unit promoted into this event. It is excluded from stable event identity because identity_basis.content_hash already binds the normalized event content."
@@ -122,7 +122,7 @@
   "$defs": {
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+      "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"
     }
   },
   "additionalProperties": false

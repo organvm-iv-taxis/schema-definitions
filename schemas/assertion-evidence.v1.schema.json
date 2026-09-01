@@ -11,7 +11,7 @@
   "properties": {
     "contract_name": {"const": "assertion-evidence.v1"},
     "contract_version": {"const": 1},
-    "assertion_id": {"type": "string", "minLength": 1},
+    "assertion_id": {"type": "string", "minLength": 1, "pattern": "^(?!.*[\\r\\n])[\\s\\S]+$(?![\\s\\S])"},
     "assertion_class": {
       "type": "string",
       "enum": ["external_fact", "operator_directive", "current_state", "inference", "historical_record", "ratified_axiom"]
@@ -24,7 +24,7 @@
       "properties": {
         "predicate": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+          "pattern": "^(?!.*[\\r\\n])[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$(?![\\s\\S])"
         },
         "subject": {
           "description": "Optional stable or human-readable subject that disambiguates which entity the predicate describes.",
@@ -34,7 +34,37 @@
         "project_repository": {
           "description": "Optional canonical owner/name repository identity for facts whose subject alone is not globally unique, such as an industry name.",
           "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          "pattern": "^(?!.*[\\r\\n])[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$(?![\\s\\S])"
+        },
+        "contributions": {
+          "description": "Optional exact contribution vocabulary for an authorship fact.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "collaborators": {
+          "description": "Optional exact collaborator vocabulary for an authorship fact.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "generated": {
+          "description": "Optional exact generated-artifact vocabulary for an authorship fact.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "inherited": {
+          "description": "Optional exact inherited-artifact vocabulary for an authorship fact.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "external": {
+          "description": "Optional exact external-artifact vocabulary for an authorship fact.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
         },
         "value": {"type": ["string", "number", "boolean", "null"]}
       },
@@ -70,8 +100,8 @@
         "type": "object",
         "required": ["evidence_id", "independence_group", "evidence_type", "reference", "body_hash"],
         "properties": {
-          "evidence_id": {"type": "string", "minLength": 1},
-          "independence_group": {"type": "string", "minLength": 1},
+          "evidence_id": {"type": "string", "minLength": 1, "pattern": "^(?!.*[\\r\\n])[\\s\\S]+$(?![\\s\\S])"},
+          "independence_group": {"type": "string", "minLength": 1, "pattern": "^(?!.*[\\r\\n])[\\s\\S]+$(?![\\s\\S])"},
           "evidence_type": {
             "type": "string",
             "enum": [
@@ -79,10 +109,19 @@
               "fresh_verifier_receipt", "primary_source", "secondary_source", "artifact", "other"
             ]
           },
-          "reference": {"type": "string", "minLength": 1},
-          "body_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "reference": {"type": "string", "minLength": 1, "pattern": "^(?!.*[\\r\\n])[\\s\\S]+$(?![\\s\\S])"},
+          "body_hash": {"type": "string", "pattern": "^(?!.*[\\r\\n])sha256:[a-f0-9]{64}$(?![\\s\\S])"},
           "observed_at": {"type": "string", "format": "date-time"}
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"evidence_type": {"const": "fresh_verifier_receipt"}},
+              "required": ["evidence_type"]
+            },
+            "then": {"required": ["observed_at"]}
+          }
+        ],
         "additionalProperties": false
       }
     }

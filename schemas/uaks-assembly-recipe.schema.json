@@ -9,7 +9,7 @@
     "recipeId": {
       "type": "string",
       "description": "Persistent identifier for this recipe.",
-      "pattern": "^rcp_[a-zA-Z0-9_-]+$"
+      "pattern": "^rcp_[a-zA-Z0-9_-]+$(?![\\s\\S])"
     },
     "recipeType": {
       "type": "string",

@@ -4,6 +4,20 @@
   "assertion_id": "project_record_fixture_authorship",
   "assertion_class": "historical_record",
   "statement": "The fixture's authorship record bounds its purpose to schema and validation demonstration.",
+  "fact": {
+    "predicate": "authorship",
+    "subject": "Anthony James Padavano",
+    "project_repository": "organvm/example-project",
+    "value": "project designer and implementer",
+    "contributions": [
+      "information architecture",
+      "implementation"
+    ],
+    "collaborators": [],
+    "generated": [],
+    "inherited": [],
+    "external": []
+  },
   "verification_state": "verified",
   "evidence_references": [
     {

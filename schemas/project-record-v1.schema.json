@@ -32,7 +32,7 @@
     "contract_version": {"const": 1},
     "project_id": {
       "type": "string",
-      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+      "pattern": "^(?!.*[\\r\\n])[a-z0-9]+(?:[._-][a-z0-9]+)*$(?![\\s\\S])"
     },
     "name": {"type": "string", "minLength": 1, "maxLength": 160},
     "canonical_repository": {"$ref": "#/$defs/repository"},
@@ -147,6 +147,7 @@
     },
     "search_intents": {
       "type": "array",
+      "description": "Top-level intent keys must be unique; the integrity runtime enforces property-level uniqueness.",
       "uniqueItems": true,
       "items": {
         "type": "object",
@@ -174,8 +175,8 @@
         "repository": {
           "type": "string",
           "format": "uri",
-          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?$",
-          "description": "Repository URL. For repository_role canonical, the integrity runtime requires this URL to resolve to canonical_repository."
+          "pattern": "^(?!.*[\\r\\n])https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?$(?![\\s\\S])",
+          "description": "Repository URL. For canonical and Class D repository roles, the integrity runtime requires this URL to resolve to canonical_repository."
         },
         "documentation": {"$ref": "#/$defs/local_or_http_ref"},
         "project_page": {"$ref": "#/$defs/http_uri"},
@@ -199,16 +200,16 @@
   "$defs": {
     "slug": {
       "type": "string",
-      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+      "pattern": "^(?!.*[\\r\\n])[a-z0-9]+(?:[._-][a-z0-9]+)*$(?![\\s\\S])"
     },
     "repository": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+      "pattern": "^(?!.*[\\r\\n])[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$(?![\\s\\S])"
     },
     "contained_local_ref": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?!.*\\u0000)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
+      "pattern": "^(?!.*[\\r\\n])(?!.*\\u0000)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$(?![\\s\\S])",
       "description": "Canonical POSIX repository-relative path that does not contain NUL, a URI scheme, absolute root, backslash separator, empty segment, current-directory segment, or parent traversal."
     },
     "assertion_local_ref": {
@@ -218,7 +219,7 @@
     "http_uri": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https?://"
+      "pattern": "^(?!.*[\\r\\n])https?://"
     },
     "local_or_http_ref": {
       "description": "A repository-contained relative path or an absolute HTTP(S) URI.",
@@ -270,7 +271,7 @@
       "required": ["mode", "path", "primary_question", "surface"],
       "properties": {
         "mode": {"type": "string", "enum": ["general", "technical", "humanities", "business", "evaluator"]},
-        "path": {"type": "string", "pattern": "^docs/audiences/[a-z0-9-]+\\.md$"},
+        "path": {"type": "string", "pattern": "^(?!.*[\\r\\n])docs/audiences/[a-z0-9-]+\\.md$(?![\\s\\S])"},
         "primary_question": {"type": "string", "minLength": 10},
         "surface": {"type": "string", "enum": ["public", "private", "internal"]},
         "search_intents": {
@@ -287,7 +288,7 @@
       "properties": {
         "name": {"type": "string", "minLength": 2},
         "status": {"type": "string", "enum": ["deployed", "piloted", "proposed"]},
-        "path": {"type": "string", "pattern": "^docs/industries/[a-z0-9-]+\\.md$"},
+        "path": {"type": "string", "pattern": "^(?!.*[\\r\\n])docs/industries/[a-z0-9-]+\\.md$(?![\\s\\S])"},
         "claim_references": {
           "type": "array",
           "description": "Top-level claim IDs. For deployed or piloted industries, at least one must resolve to relevant, verified current-state evidence for this canonical project's exact industry and status.",

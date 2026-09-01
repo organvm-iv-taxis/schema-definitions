@@ -62,11 +62,17 @@ machine-readable fact uses `industry_status`, names the industry in
 `fact.subject`, binds `fact.project_repository` to `canonical_repository`, and
 exactly matches the declared industry status.
 
+Authorship declarations are likewise evidence-bound: an implemented or partial
+authorship claim resolves to a verified factual `authorship` assertion whose
+project, subject, role value, contributions, collaborators, generated,
+inherited, and external vocabularies exactly match the project record.
+
 Class D records are noncanonical delivery surfaces and therefore use either the
 `deployment-artifact` or `mirror` repository role. Their
 `canonical_repository` and redirect target identify the same upstream
-repository; CI supplies the checked-out owner/name to the integrity runtime so
-that target must be distinct from the delivery checkout.
+repository, and `links.repository` must identify that upstream as well. CI
+supplies the checked-out owner/name to the integrity runtime so that target must
+be distinct from the delivery checkout.
 
 `exact_all` means complete classification of the declared denominator. It does
 not mean ready. Wherever a contract exposes `readiness`, `ready` additionally

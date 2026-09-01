@@ -22,7 +22,7 @@
       "properties": {
         "discovery_manifest_reference": {"type": "string", "minLength": 1},
         "count": {"type": "integer", "minimum": 0},
-        "manifest_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+        "manifest_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"}
       },
       "additionalProperties": false
     },
@@ -32,7 +32,7 @@
         "type": "object",
         "required": ["source_id", "status", "accessible", "evidence_references"],
         "properties": {
-          "source_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$"},
+          "source_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$(?![\\s\\S])"},
           "status": {
             "type": "string",
             "enum": ["acquired", "parsed", "quarantined", "inaccessible", "missing_expected", "owner_blocked"]
@@ -91,7 +91,7 @@
         "type": "object",
         "required": ["source_id", "owner_reference", "failed_predicate", "next_action"],
         "properties": {
-          "source_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$"},
+          "source_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$(?![\\s\\S])"},
           "owner_reference": {"type": "string", "minLength": 1},
           "failed_predicate": {"type": "string", "minLength": 1},
           "next_action": {"type": "string", "minLength": 1}
@@ -99,7 +99,7 @@
         "additionalProperties": false
       }
     },
-    "receipt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"}
   },
   "$defs": {
     "constitutional_scope": {

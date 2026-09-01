@@ -15,7 +15,8 @@ import re
 import sys
 from collections import Counter
 from collections.abc import Mapping
-from pathlib import Path
+from datetime import UTC, datetime
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
 try:
@@ -54,6 +55,9 @@ _DEPLOYMENT_POSTURES = {
     "public": frozenset({"implemented", "partial"}),
     "retired": frozenset({"implemented", "partial", "contradicted"}),
 }
+_FACTUAL_ASSERTION_CLASSES = frozenset(
+    {"external_fact", "current_state", "historical_record", "ratified_axiom"}
+)
 
 # Map file name patterns to schemas
 SCHEMA_MAP = {
@@ -143,6 +147,19 @@ def _duplicate_strings(values: list[str]) -> list[str]:
     return sorted(duplicates)
 
 
+def _duplicate_casefold_strings(values: list[str]) -> list[str]:
+    """Return first spellings for duplicate case-insensitive identities."""
+    first_by_identity: dict[str, str] = {}
+    duplicates: dict[str, str] = {}
+    for value in values:
+        identity = value.casefold()
+        if identity in first_by_identity:
+            duplicates[identity] = first_by_identity[identity]
+        else:
+            first_by_identity[identity] = value
+    return [duplicates[key] for key in sorted(duplicates)]
+
+
 def _github_repository_slug(value: object) -> str | None:
     """Return owner/name for one canonical GitHub repository URL."""
     if not isinstance(value, str):
@@ -163,10 +180,9 @@ def _github_repository_slug(value: object) -> str | None:
         or parsed.fragment
     ):
         return None
-    parts = [part for part in parsed.path.split("/") if part]
-    if len(parts) != 2:
+    if re.fullmatch(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?", parsed.path) is None:
         return None
-    owner, name = parts
+    owner, name = parsed.path.removesuffix("/").removeprefix("/").split("/")
     name = name.removesuffix(".git")
     repository = f"{owner}/{name}"
     return repository if _REPOSITORY_SLUG.fullmatch(repository) else None
@@ -175,7 +191,10 @@ def _github_repository_slug(value: object) -> str | None:
 def _contained_file(root: Path, reference: str) -> Path | None:
     """Resolve a repository-relative file without permitting root escape."""
     try:
-        candidate = (root / reference).resolve()
+        reference_path = Path(reference)
+        if reference_path.is_absolute() or PureWindowsPath(reference).drive:
+            return None
+        candidate = (root / reference_path).resolve()
         candidate.relative_to(root)
     except (OSError, RuntimeError, ValueError):
         return None
@@ -288,7 +307,11 @@ def _verified_fact_matches(
     require_current_state: bool = False,
 ) -> bool:
     """Return whether verified evidence asserts one exact machine fact."""
-    if assertion is None or assertion.get("verification_state") != "verified":
+    if (
+        assertion is None
+        or assertion.get("verification_state") != "verified"
+        or assertion.get("assertion_class") not in _FACTUAL_ASSERTION_CLASSES
+    ):
         return False
     if require_current_state and assertion.get("assertion_class") != "current_state":
         return False
@@ -305,11 +328,71 @@ def _verified_fact_matches(
     )
 
 
+def _verified_authorship_matches(
+    assertion: Mapping[str, object] | None,
+    *,
+    project_repository: str,
+    owner: str,
+    role: str,
+    contributions: list[str],
+    collaborators: list[str],
+    generated: list[str],
+    inherited: list[str],
+    external: list[str],
+) -> bool:
+    """Return whether verified evidence exactly binds one authorship record."""
+    if (
+        assertion is None
+        or assertion.get("verification_state") != "verified"
+        or assertion.get("assertion_class") not in _FACTUAL_ASSERTION_CLASSES
+    ):
+        return False
+    fact = assertion.get("fact")
+    if not isinstance(fact, Mapping):
+        return False
+    declared_lists = {
+        "contributions": contributions,
+        "collaborators": collaborators,
+        "generated": generated,
+        "inherited": inherited,
+        "external": external,
+    }
+    return (
+        fact.get("predicate") == "authorship"
+        and fact.get("project_repository") == project_repository
+        and fact.get("subject") == owner
+        and fact.get("value") == role
+        and all(
+            isinstance((fact_items := fact.get(field)), list)
+            and all(isinstance(item, str) for item in fact_items)
+            and sorted(fact_items) == sorted(items)
+            for field, items in declared_lists.items()
+        )
+    )
+
+
+def _utc_datetime(value: object) -> datetime | None:
+    """Parse and safely normalize one timezone-bearing ISO timestamp."""
+    if not isinstance(value, str):
+        return None
+    normalized = (
+        f"{value[:-1]}+00:00" if value.endswith(("Z", "z")) else value
+    )
+    try:
+        candidate = datetime.fromisoformat(normalized)
+        if candidate.tzinfo is None:
+            return None
+        return candidate.astimezone(UTC)
+    except (OverflowError, ValueError):
+        return None
+
+
 def project_record_semantic_errors(
     data: object,
     *,
     repository_root: str | Path | None = None,
     actual_repository: str | None = None,
+    now: datetime | None = None,
 ) -> list[str]:
     """Validate project-record invariants JSON Schema cannot express."""
     if not isinstance(data, dict):
@@ -358,6 +441,21 @@ def project_record_semantic_errors(
             + ", ".join(duplicate_claim_ids)
         )
 
+    limitations = data.get("limitations")
+    if not isinstance(limitations, list):
+        limitations = []
+    limitation_ids = [
+        limitation["id"]
+        for limitation in limitations
+        if isinstance(limitation, dict) and isinstance(limitation.get("id"), str)
+    ]
+    duplicate_limitation_ids = _duplicate_strings(limitation_ids)
+    if duplicate_limitation_ids:
+        errors.append(
+            "  limitations: duplicate id values: "
+            + ", ".join(duplicate_limitation_ids)
+        )
+
     industries = data.get("industries")
     if not isinstance(industries, list):
         industries = []
@@ -366,11 +464,44 @@ def project_record_semantic_errors(
         for industry in industries
         if isinstance(industry, dict) and isinstance(industry.get("name"), str)
     ]
-    duplicate_industry_names = _duplicate_strings(industry_names)
+    duplicate_industry_names = _duplicate_casefold_strings(industry_names)
     if duplicate_industry_names:
         errors.append(
             "  industries: duplicate name values: "
             + ", ".join(duplicate_industry_names)
+        )
+    canonical_repository = data.get("canonical_repository")
+    former_repositories = data.get("former_repositories")
+    if isinstance(former_repositories, list):
+        former_repository_names = [
+            item for item in former_repositories if isinstance(item, str)
+        ]
+        duplicate_former = _duplicate_casefold_strings(former_repository_names)
+        if duplicate_former:
+            errors.append(
+                "  former_repositories: duplicate case-insensitive identities: "
+                + ", ".join(duplicate_former)
+            )
+        if isinstance(canonical_repository, str) and any(
+            item.casefold() == canonical_repository.casefold()
+            for item in former_repository_names
+        ):
+            errors.append(
+                "  former_repositories must not contain canonical_repository"
+            )
+    search_intents = data.get("search_intents")
+    if not isinstance(search_intents, list):
+        search_intents = []
+    search_intent_keys = [
+        item["intent"]
+        for item in search_intents
+        if isinstance(item, dict) and isinstance(item.get("intent"), str)
+    ]
+    duplicate_search_intents = _duplicate_strings(search_intent_keys)
+    if duplicate_search_intents:
+        errors.append(
+            "  search_intents: duplicate intent values: "
+            + ", ".join(duplicate_search_intents)
         )
     claim_id_counts = Counter(claim_ids)
     claim_indexes_by_id = {
@@ -398,7 +529,28 @@ def project_record_semantic_errors(
     repository_role = data.get("repository_role")
     canonical_repository = data.get("canonical_repository")
     links = data.get("links")
-    if repository_role == "canonical" and isinstance(canonical_repository, str):
+    class_d_delivery = documentation_class == "D" or (
+        isinstance(repository_role, str)
+        and repository_role in {"mirror", "deployment-artifact"}
+    )
+    actual_repository_valid = actual_repository is None or (
+        _REPOSITORY_SLUG.fullmatch(actual_repository) is not None
+    )
+    if not actual_repository_valid:
+        errors.append("  actual_repository must use owner/name form")
+    elif (
+        actual_repository is not None
+        and not class_d_delivery
+        and isinstance(canonical_repository, str)
+        and canonical_repository.casefold() != actual_repository.casefold()
+    ):
+        errors.append(
+            "  canonical_repository must match actual_repository for a non-Class D "
+            "strict checkout"
+        )
+    if (
+        repository_role == "canonical" or class_d_delivery
+    ) and isinstance(canonical_repository, str):
         repository_link = links.get("repository") if isinstance(links, dict) else None
         linked_repository = _github_repository_slug(repository_link)
         if (
@@ -407,12 +559,8 @@ def project_record_semantic_errors(
         ):
             errors.append(
                 "  links.repository must resolve to canonical_repository for a "
-                "canonical repository role"
+                "canonical or Class D repository role"
             )
-    class_d_delivery = documentation_class == "D" or (
-        isinstance(repository_role, str)
-        and repository_role in {"mirror", "deployment-artifact"}
-    )
     if class_d_delivery:
         redirect = data.get("redirect")
         target = redirect.get("target") if isinstance(redirect, dict) else None
@@ -432,9 +580,7 @@ def project_record_semantic_errors(
             errors.append(
                 "  class D validation requires actual_repository owner/name context"
             )
-        elif _REPOSITORY_SLUG.fullmatch(actual_repository) is None:
-            errors.append("  actual_repository must use owner/name form")
-        elif (
+        elif actual_repository_valid and (
             isinstance(canonical_repository, str)
             and canonical_repository.casefold() == actual_repository.casefold()
         ):
@@ -497,22 +643,40 @@ def project_record_semantic_errors(
             if assertion is not None and not assertion_errors:
                 resolved_assertions[index] = assertion
 
-        limitations = data.get("limitations")
-        if isinstance(limitations, list):
-            for index, limitation in enumerate(limitations):
-                if not isinstance(limitation, dict):
-                    continue
-                reference = limitation.get("assertion_ref")
-                assertion_id = limitation.get("assertion_id")
-                if not isinstance(reference, str) or not isinstance(assertion_id, str):
-                    continue
-                _assertion, assertion_errors = _assertion_target(
-                    root=root,
-                    reference=reference,
-                    assertion_id=assertion_id,
-                    label=f"limitations[{index}]",
+        for index, limitation in enumerate(limitations):
+            if not isinstance(limitation, dict):
+                continue
+            reference = limitation.get("assertion_ref")
+            assertion_id = limitation.get("assertion_id")
+            if not isinstance(reference, str) or not isinstance(assertion_id, str):
+                continue
+            assertion, assertion_errors = _assertion_target(
+                root=root,
+                reference=reference,
+                assertion_id=assertion_id,
+                label=f"limitations[{index}]",
+            )
+            errors.extend(assertion_errors)
+            limitation_id = limitation.get("id")
+            statement = limitation.get("statement")
+            if (
+                assertion is not None
+                and not assertion_errors
+                and isinstance(canonical_repository, str)
+                and isinstance(limitation_id, str)
+                and isinstance(statement, str)
+                and not _verified_fact_matches(
+                    assertion,
+                    predicate="limitation",
+                    subject=limitation_id,
+                    project_repository=canonical_repository,
+                    value=statement,
                 )
-                errors.extend(assertion_errors)
+            ):
+                errors.append(
+                    f"  limitations[{index}] assertion must be verified factual "
+                    "evidence binding the canonical project, limitation id, and statement"
+                )
 
     for industry_index, industry in enumerate(industries):
         if not isinstance(industry, dict):
@@ -575,6 +739,59 @@ def project_record_semantic_errors(
                 "an implemented or partial deployment/adoption claim backed by a "
                 "verified fresh current_state industry_status fact for that industry"
             )
+
+    authorship = data.get("authorship")
+    if isinstance(authorship, Mapping):
+        owner = authorship.get("owner")
+        role = authorship.get("role")
+        contributions = authorship.get("contributions")
+        collaborators = authorship.get("collaborators", [])
+        generated = authorship.get("generated", [])
+        inherited = authorship.get("inherited", [])
+        external = authorship.get("external", [])
+        if (
+            isinstance(owner, str)
+            and isinstance(role, str)
+            and isinstance(contributions, list)
+            and all(isinstance(item, str) for item in contributions)
+            and all(
+                isinstance(items, list)
+                and all(isinstance(item, str) for item in items)
+                for items in (collaborators, generated, inherited, external)
+            )
+        ):
+            qualifying_authorship_claims = [
+                index
+                for index, claim in enumerate(claims)
+                if isinstance(claim, dict)
+                and claim.get("scope") == "authorship"
+                and isinstance(claim.get("claim_posture"), str)
+                and claim.get("claim_posture") in {"implemented", "partial"}
+            ]
+            if root is None:
+                errors.append(
+                    "  authorship requires repository_root to verify assertion evidence"
+                )
+            elif not isinstance(canonical_repository, str) or not any(
+                _verified_authorship_matches(
+                    resolved_assertions.get(index),
+                    project_repository=canonical_repository,
+                    owner=owner,
+                    role=role,
+                    contributions=contributions,
+                    collaborators=collaborators,
+                    generated=generated,
+                    inherited=inherited,
+                    external=external,
+                )
+                for index in qualifying_authorship_claims
+            ):
+                errors.append(
+                    "  authorship requires an implemented or partial authorship claim "
+                    "backed by a verified fact matching the canonical project, owner, "
+                    "role, contributions, collaborators, generated, inherited, and "
+                    "external declarations"
+                )
 
     implementation_status = data.get("implementation_status")
     if isinstance(implementation_status, str):
@@ -653,6 +870,29 @@ def project_record_semantic_errors(
                     "qualifying deployment claim that resolves to a verified assertion "
                     "whose fact exactly matches deployment_status"
                 )
+    validation_now = (now or datetime.now(UTC)).astimezone(UTC)
+    parsed_project_timestamps: dict[str, datetime] = {}
+    for timestamp_field in ("generated_at", "verified_at"):
+        timestamp_value = data.get(timestamp_field)
+        if not isinstance(timestamp_value, str):
+            continue
+        parsed_timestamp = _utc_datetime(timestamp_value)
+        if parsed_timestamp is None:
+            errors.append(
+                f"  {timestamp_field} must be a timezone-bearing ISO 8601 "
+                "date-time that normalizes safely"
+            )
+        elif parsed_timestamp > validation_now:
+            errors.append(f"  {timestamp_field} cannot be in the future")
+        else:
+            parsed_project_timestamps[timestamp_field] = parsed_timestamp
+    if (
+        "generated_at" in parsed_project_timestamps
+        and "verified_at" in parsed_project_timestamps
+        and parsed_project_timestamps["generated_at"]
+        > parsed_project_timestamps["verified_at"]
+    ):
+        errors.append("  generated_at must not be later than verified_at")
     return errors
 
 
@@ -750,11 +990,17 @@ def main():
             and filepath.resolve() == PROJECT_RECORD_EXAMPLE.resolve()
         ):
             repository_root = PROJECT_RECORD_FIXTURE_ROOT
+        target_actual_repository = args.actual_repository
+        if args.all_examples and filepath.resolve() == PROJECT_RECORD_EXAMPLE.resolve():
+            bundled_project = load_data(filepath)
+            declared_repository = bundled_project.get("canonical_repository")
+            if isinstance(declared_repository, str):
+                target_actual_repository = declared_repository
         ok, errors = validate_file(
             filepath,
             schema_override,
             repository_root=repository_root,
-            actual_repository=args.actual_repository,
+            actual_repository=target_actual_repository,
         )
         status = "PASS" if ok else "FAIL"
         print(f"{status} {filepath.name}")

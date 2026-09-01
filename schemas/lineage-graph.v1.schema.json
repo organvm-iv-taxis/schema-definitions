@@ -31,14 +31,14 @@
               "pull_request", "implementation", "receipt", "source_event", "ideal_form"
             ]
           },
-          "source_envelope_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$"},
+          "source_envelope_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$(?![\\s\\S])"},
           "occurred_at": {"type": "string", "format": "date-time"},
           "authority_class": {
             "type": "string",
             "enum": ["operator_intent", "artifact", "transport_echo", "system_metadata", "unknown"]
           },
           "summary": {"type": "string", "minLength": 1},
-          "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"},
           "review_state": {"type": "string", "enum": ["unreviewed", "reviewed", "rejected"]},
           "metadata": {"type": "object", "additionalProperties": true}
         },
@@ -78,9 +78,9 @@
               "type": "object",
               "required": ["source_envelope_id", "reference", "body_hash"],
               "properties": {
-                "source_envelope_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$"},
+                "source_envelope_id": {"type": "string", "pattern": "^src_[A-Za-z0-9_-]+$(?![\\s\\S])"},
                 "reference": {"type": "string", "minLength": 1},
-                "body_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+                "body_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"},
                 "start_offset": {"type": "integer", "minimum": 0},
                 "end_offset": {"type": "integer", "minimum": 0}
               },

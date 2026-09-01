@@ -641,10 +641,11 @@ def _assertion_errors(
             f"evidence_references contain duplicate evidence_id values: {duplicate_evidence_ids}"
         )
 
+    validation_now = (now or datetime.now(UTC)).astimezone(UTC)
+    parsed_verified_at: datetime | None = None
     freshness = data.get("freshness")
     if isinstance(freshness, dict):
         verified_at = freshness.get("verified_at")
-        parsed_verified_at: datetime | None = None
         if isinstance(verified_at, str):
             try:
                 normalized_verified_at = (
@@ -662,7 +663,6 @@ def _assertion_errors(
                 "freshness.verified_at must be an ISO 8601 date-time with a timezone"
             )
         else:
-            validation_now = (now or datetime.now(UTC)).astimezone(UTC)
             if parsed_verified_at > validation_now:
                 errors.append("freshness.verified_at cannot be in the future")
             max_age_seconds = freshness.get("max_age_seconds")
@@ -690,6 +690,47 @@ def _assertion_errors(
                             errors.append(
                                 "freshness.status 'fresh' is expired at validation time"
                             )
+
+    for index, item in enumerate(evidence):
+        if not isinstance(item, dict):
+            continue
+        observed_at = item.get("observed_at")
+        if item.get("evidence_type") == "fresh_verifier_receipt" and not isinstance(
+            observed_at, str
+        ):
+            errors.append(
+                f"evidence_references[{index}] fresh_verifier_receipt requires observed_at"
+            )
+            continue
+        if not isinstance(observed_at, str):
+            continue
+        parsed_observed_at: datetime | None = None
+        try:
+            normalized_observed_at = (
+                f"{observed_at[:-1]}+00:00"
+                if observed_at.endswith(("Z", "z"))
+                else observed_at
+            )
+            candidate = datetime.fromisoformat(normalized_observed_at)
+            if candidate.tzinfo is not None:
+                parsed_observed_at = candidate.astimezone(UTC)
+        except (OverflowError, ValueError):
+            parsed_observed_at = None
+        if parsed_observed_at is None:
+            errors.append(
+                f"evidence_references[{index}].observed_at must be a safe timezone-bearing date-time"
+            )
+        elif parsed_observed_at > validation_now:
+            errors.append(
+                f"evidence_references[{index}].observed_at cannot be in the future"
+            )
+        elif (
+            parsed_verified_at is not None
+            and parsed_observed_at > parsed_verified_at
+        ):
+            errors.append(
+                f"evidence_references[{index}].observed_at cannot be later than freshness.verified_at"
+            )
 
     if data.get("verification_state") != "verified":
         return errors
@@ -739,6 +780,36 @@ def _assertion_errors(
             errors.append(
                 "a verified current_state is missing evidence types: "
                 + ", ".join(missing)
+            )
+        owner_sources = {
+            (item.get("independence_group"), item.get("reference"), item.get("body_hash"))
+            for item in evidence
+            if isinstance(item, dict)
+            and item.get("evidence_type") == "owner_record"
+            and all(
+                isinstance(item.get(field), str) and item.get(field)
+                for field in ("independence_group", "reference", "body_hash")
+            )
+        }
+        verifier_sources = {
+            (item.get("independence_group"), item.get("reference"), item.get("body_hash"))
+            for item in evidence
+            if isinstance(item, dict)
+            and item.get("evidence_type") == "fresh_verifier_receipt"
+            and all(
+                isinstance(item.get(field), str) and item.get(field)
+                for field in ("independence_group", "reference", "body_hash")
+            )
+        }
+        independent_pair = any(
+            owner[0] != verifier[0] and owner[1] != verifier[1]
+            for owner in owner_sources
+            for verifier in verifier_sources
+        )
+        if len(groups) < 2 or not independent_pair:
+            errors.append(
+                "a verified current_state requires owner and verifier evidence from "
+                "distinct nonempty independence groups and source identities"
             )
         if not isinstance(freshness, dict) or freshness.get("status") != "fresh":
             errors.append("a verified current_state requires freshness.status 'fresh'")
@@ -1634,7 +1705,9 @@ def validate_document(
     for error in sorted(validator.iter_errors(data), key=lambda item: list(item.absolute_path)):
         path = ".".join(str(part) for part in error.absolute_path) or "(root)"
         schema_errors.append(f"{path}: {error.message}")
-    return schema_errors, semantic_errors(data)
+    if schema_errors:
+        return schema_errors, []
+    return [], semantic_errors(data)
 
 
 def main() -> int:

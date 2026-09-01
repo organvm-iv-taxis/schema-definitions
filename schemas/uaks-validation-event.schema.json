@@ -9,7 +9,7 @@
     "eventId": {
       "type": "string",
       "description": "Unique identifier for this validation event.",
-      "pattern": "^vev_[a-zA-Z0-9_-]+$"
+      "pattern": "^vev_[a-zA-Z0-9_-]+$(?![\\s\\S])"
     },
     "atomId": {
       "type": "string",

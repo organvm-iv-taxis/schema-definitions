@@ -166,6 +166,21 @@ def test_project_record_semantics_reject_duplicate_claim_ids(tmp_path):
     assert any("duplicate id values: project-status" in error for error in errors)
 
 
+def test_project_record_semantics_reject_duplicate_limitation_ids(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["limitations"].append(json.loads(json.dumps(baseline["limitations"][0])))
+    target = tmp_path / "project-record-duplicate-limitation.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any("limitations: duplicate id values: example-only" in error for error in errors)
+
+
 def test_project_record_semantics_reject_duplicate_industry_names(tmp_path):
     baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
     baseline["industries"] = [
@@ -186,6 +201,53 @@ def test_project_record_semantics_reject_duplicate_industry_names(tmp_path):
 
     assert ok is False
     assert any("industries: duplicate name values: Education" in error for error in errors)
+
+    baseline["industries"][1]["name"] = "education"
+    target.write_text(json.dumps(baseline))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+    assert ok is False
+    assert any("industries: duplicate name values: Education" in error for error in errors)
+
+
+def test_former_repository_identities_are_disjoint_and_case_unique(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    target = tmp_path / "project-record-former-repositories.json"
+
+    for former in (
+        ["ORGANVM/EXAMPLE-PROJECT"],
+        ["organvm/old-project", "ORGANVM/OLD-PROJECT"],
+    ):
+        baseline["former_repositories"] = former
+        target.write_text(json.dumps(baseline))
+        ok, errors = validate_script.validate_file(
+            target,
+            repository_root=PROJECT_RECORD_FIXTURE,
+        )
+        assert ok is False
+        assert any("former_repositories" in error for error in errors)
+
+
+def test_project_record_semantics_reject_duplicate_search_intents(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["search_intents"].append(
+        {"intent": "informational", "terms": ["different terms"]}
+    )
+    target = tmp_path / "project-record-duplicate-search-intent.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any(
+        "search_intents: duplicate intent values: informational" in error
+        for error in errors
+    )
 
 
 def test_project_record_semantics_resolve_industry_claim_ids(tmp_path):
@@ -274,6 +336,9 @@ def test_deployed_industry_requires_relevant_substantiated_evidence(tmp_path):
             },
         ],
     }
+    assertion["evidence_references"][1]["observed_at"] = assertion["freshness"][
+        "verified_at"
+    ]
     assertion_path.write_text(json.dumps(assertion))
     baseline["claim_references"].append(
         {
@@ -356,6 +421,187 @@ def test_strict_project_record_example_binds_nested_fixture_bytes():
 
     assert ok is True
     assert errors == []
+
+
+def test_authorship_requires_a_matching_bound_fact(tmp_path):
+    for field, replacement in (
+        ("owner", "Unrelated Owner"),
+        ("role", "unrelated role"),
+        ("contributions", ["unrelated contribution"]),
+        ("collaborators", ["Unrelated Collaborator"]),
+        ("generated", ["unrelated generated artifact"]),
+        ("inherited", ["unrelated inherited artifact"]),
+        ("external", ["unrelated external artifact"]),
+    ):
+        candidate = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+        candidate["authorship"][field] = replacement
+        target = tmp_path / f"project-record-wrong-authorship-{field}.json"
+        target.write_text(json.dumps(candidate))
+
+        ok, errors = validate_script.validate_file(
+            target,
+            repository_root=PROJECT_RECORD_FIXTURE,
+        )
+
+        assert ok is False
+        assert any("verified fact matching the canonical project" in error for error in errors)
+
+
+def test_strict_checkout_binds_actual_to_canonical_repository(tmp_path):
+    target = tmp_path / "project-record.yaml"
+    target.write_text(PROJECT_RECORD_EXAMPLE.read_text())
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+        actual_repository="organvm/unrelated-checkout",
+    )
+
+    assert ok is False
+    assert any("must match actual_repository" in error for error in errors)
+
+
+def test_project_timestamps_cannot_be_in_the_future(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["generated_at"] = "9999-12-30T00:00:00Z"
+    baseline["verified_at"] = "9999-12-31T00:00:00Z"
+    target = tmp_path / "project-record-future.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is False
+    assert any("generated_at cannot be in the future" in error for error in errors)
+    assert any("verified_at cannot be in the future" in error for error in errors)
+
+    baseline["generated_at"] = "2026-08-31T20:00:01Z"
+    baseline["verified_at"] = "2026-08-31T20:00:00Z"
+    target.write_text(json.dumps(baseline))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+    assert ok is False
+    assert any("generated_at must not be later" in error for error in errors)
+
+
+def test_project_timestamp_overflow_does_not_abort_later_batch_target(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    boundary = json.loads(json.dumps(baseline))
+    boundary["verified_at"] = "9999-12-31T23:59:59-23:59"
+    boundary_path = tmp_path / "project-record-boundary-time.json"
+    valid_path = tmp_path / "project-record-valid.json"
+    boundary_path.write_text(json.dumps(boundary))
+    valid_path.write_text(json.dumps(baseline))
+
+    exit_code, captured = run_main(
+        monkeypatch,
+        capsys,
+        "--repository-root",
+        PROJECT_RECORD_FIXTURE,
+        boundary_path,
+        valid_path,
+    )
+
+    assert exit_code == 1
+    assert "FAIL project-record-boundary-time.json" in captured.out
+    assert "normalizes safely" in captured.out
+    assert "PASS project-record-valid.json" in captured.out
+
+
+def test_absolute_assertion_evidence_path_is_rejected(tmp_path):
+    repository_root = tmp_path / "repository"
+    shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    assertion_path = repository_root / baseline["claim_references"][1]["assertion_ref"]
+    assertion = json.loads(assertion_path.read_text())
+    relative_reference = assertion["evidence_references"][0]["reference"]
+    assertion["evidence_references"][0]["reference"] = str(
+        (repository_root / relative_reference).resolve()
+    )
+    assertion_path.write_text(json.dumps(assertion))
+    target = tmp_path / "project-record-absolute-evidence.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+
+    assert ok is False
+    assert any("path does not exist or escapes root" in error for error in errors)
+
+
+def test_windows_drive_evidence_path_is_rejected_on_posix(tmp_path):
+    repository_root = tmp_path / "repository"
+    shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    assertion_path = repository_root / baseline["claim_references"][0]["assertion_ref"]
+    assertion = json.loads(assertion_path.read_text())
+    original = repository_root / assertion["evidence_references"][0]["reference"]
+    spoof = repository_root / "C:" / "status-record.txt"
+    spoof.parent.mkdir()
+    spoof.write_bytes(original.read_bytes())
+    assertion["evidence_references"][0]["reference"] = "C:/status-record.txt"
+    assertion_path.write_text(json.dumps(assertion))
+    target = tmp_path / "project-record-windows-drive.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(target, repository_root=repository_root)
+    assert ok is False
+    assert any("path does not exist or escapes root" in error for error in errors)
+
+
+def test_limitation_assertion_must_bind_the_limitation_fact(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    authorship_claim = baseline["claim_references"][1]
+    baseline["limitations"][0].update(
+        {
+            "assertion_id": authorship_claim["assertion_id"],
+            "assertion_ref": authorship_claim["assertion_ref"],
+        }
+    )
+    target = tmp_path / "project-record-unrelated-limitation.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+    assert ok is False
+    assert any("limitation id, and statement" in error for error in errors)
+
+
+def test_inference_assertions_cannot_prove_project_facts(tmp_path):
+    for claim_index, expected in (
+        (0, "implementation_status"),
+        (1, "authorship requires"),
+    ):
+        repository_root = tmp_path / f"repository-{claim_index}"
+        shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
+        baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+        claim = baseline["claim_references"][claim_index]
+        assertion_path = repository_root / claim["assertion_ref"]
+        assertion = json.loads(assertion_path.read_text())
+        assertion["assertion_class"] = "inference"
+        assertion["inference_label"] = "test inference"
+        assertion_path.write_text(json.dumps(assertion))
+        target = tmp_path / f"project-record-inference-{claim_index}.json"
+        target.write_text(json.dumps(baseline))
+
+        ok, errors = validate_script.validate_file(
+            target,
+            repository_root=repository_root,
+        )
+        assert ok is False
+        assert any(expected in error for error in errors)
 
 
 def test_implementation_status_requires_a_matching_bound_fact(tmp_path):
@@ -458,6 +704,9 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
             },
         ],
     }
+    assertion["evidence_references"][1]["observed_at"] = assertion["freshness"][
+        "verified_at"
+    ]
     assertion_path.write_text(json.dumps(assertion))
     deployment_claim.update(
         {
@@ -526,6 +775,18 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     )
     assert ok is True
     assert errors == []
+
+    retired_inference = json.loads(json.dumps(retired_record))
+    retired_inference["assertion_class"] = "inference"
+    retired_inference["inference_label"] = "retirement inference"
+    assertion_path.write_text(json.dumps(retired_inference))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("fact exactly matches deployment_status" in error for error in errors)
+
     assertion_path.write_text(json.dumps(assertion))
     target.write_text(json.dumps(baseline))
 
@@ -593,6 +854,18 @@ def test_class_d_redirect_binds_canonical_and_actual_repository(tmp_path):
     assert ok is True
     assert errors == []
 
+    record["links"]["repository"] = "https://github.com/organvm/unrelated"
+    target.write_text(json.dumps(record))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+        actual_repository="organvm/example-deployment",
+    )
+    assert ok is False
+    assert any("links.repository must resolve to canonical_repository" in error for error in errors)
+    record["links"]["repository"] = "https://github.com/organvm/example-project"
+    target.write_text(json.dumps(record))
+
     ok, errors = validate_script.validate_file(
         target,
         repository_root=PROJECT_RECORD_FIXTURE,
@@ -619,6 +892,18 @@ def test_class_d_redirect_binds_canonical_and_actual_repository(tmp_path):
     )
     assert ok is False
     assert any("requires actual_repository" in error for error in errors)
+
+    record["redirect"]["target"] = (
+        "https://github.com//organvm/example-project//"
+    )
+    target.write_text(json.dumps(record))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+        actual_repository="organvm/example-deployment",
+    )
+    assert ok is False
+    assert any("canonical HTTPS GitHub" in error for error in errors)
 
 
 def test_malformed_project_uri_does_not_abort_later_batch_targets(

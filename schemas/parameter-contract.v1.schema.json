@@ -25,7 +25,7 @@
           "secret_reference_policy"
         ],
         "properties": {
-          "key": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+          "key": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$(?![\\s\\S])"},
           "value_type": {
             "type": "string",
             "enum": [
@@ -73,7 +73,7 @@
             "enum": ["forbidden", "reference_only", "required"]
           },
           "default": true,
-          "example_placeholder": {"type": "string", "pattern": "^\\$\\{[A-Z][A-Z0-9_]*\\}$"},
+          "example_placeholder": {"type": "string", "pattern": "^\\$\\{[A-Z][A-Z0-9_]*\\}$(?![\\s\\S])"},
           "owner_reference": {"type": "string", "minLength": 1}
         },
         "additionalProperties": false
