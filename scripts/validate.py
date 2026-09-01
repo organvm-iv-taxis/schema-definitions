@@ -160,6 +160,14 @@ def _duplicate_casefold_strings(values: list[str]) -> list[str]:
     return [duplicates[key] for key in sorted(duplicates)]
 
 
+def _repository_slug(value: object) -> str | None:
+    """Return a validated owner/name identity without dot segments."""
+    if not isinstance(value, str) or _REPOSITORY_SLUG.fullmatch(value) is None:
+        return None
+    owner, name = value.split("/")
+    return value if owner not in {".", ".."} and name not in {".", ".."} else None
+
+
 def _github_repository_slug(value: object) -> str | None:
     """Return owner/name for one canonical GitHub repository URL."""
     if not isinstance(value, str):
@@ -185,13 +193,7 @@ def _github_repository_slug(value: object) -> str | None:
     owner, name = parsed.path.removesuffix("/").removeprefix("/").split("/")
     name = name.removesuffix(".git")
     repository = f"{owner}/{name}"
-    return (
-        repository
-        if _REPOSITORY_SLUG.fullmatch(repository)
-        and owner not in {".", ".."}
-        and name not in {".", ".."}
-        else None
-    )
+    return _repository_slug(repository)
 
 
 def _contained_file(root: Path, reference: str) -> Path | None:
@@ -558,7 +560,7 @@ def project_record_semantic_errors(
         and repository_role in {"mirror", "deployment-artifact"}
     )
     actual_repository_valid = actual_repository is None or (
-        _REPOSITORY_SLUG.fullmatch(actual_repository) is not None
+        _repository_slug(actual_repository) is not None
     )
     if not actual_repository_valid:
         errors.append("  actual_repository must use owner/name form")

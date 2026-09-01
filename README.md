@@ -71,8 +71,10 @@ Class D records are noncanonical delivery surfaces and therefore use either the
 `deployment-artifact` or `mirror` repository role. Their
 `canonical_repository` and redirect target identify the same upstream
 repository, and `links.repository` must identify that upstream as well. CI
-supplies the checked-out owner/name to the integrity runtime so that target must
-be distinct from the delivery checkout.
+validates the bundled synthetic fixture without asserting a checkout identity.
+Callers validating a live Class D checkout must pass its owner/name through
+`--actual-repository`; the integrity runtime then requires it to be distinct
+from the canonical target.
 
 `exact_all` means complete classification of the declared denominator. It does
 not mean ready. Wherever a contract exposes `readiness`, `ready` additionally

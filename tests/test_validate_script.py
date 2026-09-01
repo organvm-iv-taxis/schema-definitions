@@ -922,6 +922,28 @@ def test_class_d_redirect_binds_canonical_and_actual_repository(tmp_path):
     assert any("canonical HTTPS GitHub" in error for error in errors)
 
 
+def test_class_d_rejects_dot_segment_checkout_identities(tmp_path):
+    record = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    record["documentation_class"] = "D"
+    record["repository_role"] = "deployment-artifact"
+    record["audience_routes"] = []
+    record["redirect"] = {
+        "status": "active",
+        "target": "https://github.com/organvm/example-project",
+    }
+    target = tmp_path / "project-record-deployment.json"
+    target.write_text(json.dumps(record))
+
+    for actual_repository in ("./delivery", "../delivery", "owner/.", "owner/.."):
+        ok, errors = validate_script.validate_file(
+            target,
+            repository_root=PROJECT_RECORD_FIXTURE,
+            actual_repository=actual_repository,
+        )
+        assert ok is False
+        assert any("actual_repository must use owner/name form" in error for error in errors)
+
+
 def test_malformed_project_uri_does_not_abort_later_batch_targets(
     tmp_path,
     monkeypatch,
