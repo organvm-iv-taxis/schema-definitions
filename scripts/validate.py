@@ -185,7 +185,13 @@ def _github_repository_slug(value: object) -> str | None:
     owner, name = parsed.path.removesuffix("/").removeprefix("/").split("/")
     name = name.removesuffix(".git")
     repository = f"{owner}/{name}"
-    return repository if _REPOSITORY_SLUG.fullmatch(repository) else None
+    return (
+        repository
+        if _REPOSITORY_SLUG.fullmatch(repository)
+        and owner not in {".", ".."}
+        and name not in {".", ".."}
+        else None
+    )
 
 
 def _contained_file(root: Path, reference: str) -> Path | None:
@@ -253,6 +259,10 @@ def _assertion_target(
         )
 
         evidence = assertion.get("evidence_references")
+        resolved_sources: dict[str, set[Path]] = {
+            "owner_record": set(),
+            "fresh_verifier_receipt": set(),
+        }
         if isinstance(evidence, list):
             for index, item in enumerate(evidence):
                 if not isinstance(item, Mapping):
@@ -271,6 +281,9 @@ def _assertion_target(
                         f"{evidence_reference}"
                     )
                     continue
+                evidence_type = item.get("evidence_type")
+                if isinstance(evidence_type, str) and evidence_type in resolved_sources:
+                    resolved_sources[evidence_type].add(evidence_path)
                 try:
                     evidence_bytes = evidence_path.read_bytes()
                 except OSError as exc:
@@ -281,6 +294,17 @@ def _assertion_target(
                     errors.append(
                         f"  {evidence_label} body_hash does not match raw bytes"
                     )
+        if (
+            assertion.get("assertion_class") == "current_state"
+            and assertion.get("verification_state") == "verified"
+            and resolved_sources["owner_record"].intersection(
+                resolved_sources["fresh_verifier_receipt"]
+            )
+        ):
+            errors.append(
+                f"  assertion {reference}: owner and verifier evidence must resolve "
+                "to distinct source files"
+            )
 
     if not contract_matches or not id_matches:
         return None, errors

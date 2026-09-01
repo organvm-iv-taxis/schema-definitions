@@ -729,6 +729,22 @@ def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
     assert ok is True
     assert errors == []
 
+    aliased_source = json.loads(json.dumps(assertion))
+    aliased_source["evidence_references"][1]["reference"] = owner_reference.replace(
+        "deployment-public-owner.txt", "./deployment-public-owner.txt"
+    )
+    aliased_source["evidence_references"][1]["body_hash"] = aliased_source[
+        "evidence_references"
+    ][0]["body_hash"]
+    assertion_path.write_text(json.dumps(aliased_source))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("distinct source files" in error for error in errors)
+    assertion_path.write_text(json.dumps(assertion))
+
     wrong_project = json.loads(json.dumps(assertion))
     wrong_project["fact"]["subject"] = "organvm/different-project"
     assertion_path.write_text(json.dumps(wrong_project))

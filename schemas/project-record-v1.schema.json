@@ -175,7 +175,7 @@
         "repository": {
           "type": "string",
           "format": "uri",
-          "pattern": "^(?!.*[\\r\\n])https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?$(?![\\s\\S])",
+          "pattern": "^(?!.*[\\r\\n])https://github\\.com/(?!\\.{1,2}/)[A-Za-z0-9_.-]+/(?!\\.{1,2}(?:\\.git)?/?$(?![\\s\\S]))[A-Za-z0-9_.-]+(?:\\.git)?/?$(?![\\s\\S])",
           "description": "Repository URL. For canonical and Class D repository roles, the integrity runtime requires this URL to resolve to canonical_repository."
         },
         "documentation": {"$ref": "#/$defs/local_or_http_ref"},
@@ -204,7 +204,7 @@
     },
     "repository": {
       "type": "string",
-      "pattern": "^(?!.*[\\r\\n])[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$(?![\\s\\S])"
+      "pattern": "^(?!.*[\\r\\n])(?!\\.{1,2}/)[A-Za-z0-9_.-]+/(?!\\.{1,2}$(?![\\s\\S]))[A-Za-z0-9_.-]+$(?![\\s\\S])"
     },
     "contained_local_ref": {
       "type": "string",

@@ -731,6 +731,19 @@ def _assertion_errors(
             errors.append(
                 f"evidence_references[{index}].observed_at cannot be later than freshness.verified_at"
             )
+        elif (
+            item.get("evidence_type") == "fresh_verifier_receipt"
+            and parsed_verified_at is not None
+            and isinstance(freshness, dict)
+            and isinstance((max_age_seconds := freshness.get("max_age_seconds")), int)
+            and not isinstance(max_age_seconds, bool)
+            and 0 < max_age_seconds <= MAX_FRESHNESS_AGE_SECONDS
+            and parsed_observed_at
+            < parsed_verified_at - timedelta(seconds=max_age_seconds)
+        ):
+            errors.append(
+                f"evidence_references[{index}].observed_at exceeds the declared freshness window"
+            )
 
     if data.get("verification_state") != "verified":
         return errors

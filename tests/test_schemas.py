@@ -281,6 +281,16 @@ class TestProjectRecordSchema:
         for candidate in candidates:
             assert validate(candidate, schema)
 
+    def test_repository_identities_reject_dot_segments(self):
+        schema = load_schema("project-record-v1.schema.json")
+        with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:
+            baseline = yaml.safe_load(f)
+
+        for repository in ("./project", "../project", "owner/.", "owner/.."):
+            candidate = yaml.safe_load(yaml.safe_dump(baseline))
+            candidate["canonical_repository"] = repository
+            assert validate(candidate, schema), repository
+
     def test_class_a_requires_evidence_link(self):
         schema = load_schema("project-record-v1.schema.json")
         with open(EXAMPLES_DIR / "project-record-v1-example.yaml") as f:

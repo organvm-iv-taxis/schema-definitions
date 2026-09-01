@@ -539,6 +539,12 @@ def test_evidence_observation_must_precede_verification_and_now():
     assert schema_errors == []
     assert any("later than freshness.verified_at" in error for error in invariant_errors)
 
+    data["evidence_references"][1]["observed_at"] = "2026-08-31T09:59:59Z"
+    assert any(
+        "exceeds the declared freshness window" in error
+        for error in semantic_errors(data, now=validation_now)
+    )
+
     del data["evidence_references"][1]["observed_at"]
     schema_errors, invariant_errors = validate_document(data)
     assert any("observed_at" in error for error in schema_errors)

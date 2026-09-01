@@ -34,7 +34,7 @@
         "project_repository": {
           "description": "Optional canonical owner/name repository identity for facts whose subject alone is not globally unique, such as an industry name.",
           "type": "string",
-          "pattern": "^(?!.*[\\r\\n])[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$(?![\\s\\S])"
+          "pattern": "^(?!.*[\\r\\n])(?!\\.{1,2}/)[A-Za-z0-9_.-]+/(?!\\.{1,2}$(?![\\s\\S]))[A-Za-z0-9_.-]+$(?![\\s\\S])"
         },
         "contributions": {
           "description": "Optional exact contribution vocabulary for an authorship fact.",
