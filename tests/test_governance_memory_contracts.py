@@ -596,6 +596,44 @@ def test_assertion_freshness_rejects_utc_normalization_overflow_without_aborting
     assert f"PASS {valid_path}" in captured
 
 
+def test_freshness_window_underflow_does_not_abort_later_batch_target(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    boundary = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    boundary["assertion_class"] = "current_state"
+    boundary["freshness"] = {
+        "verified_at": "0001-01-01T00:00:00Z",
+        "max_age_seconds": 60,
+        "status": "fresh",
+    }
+    boundary["evidence_references"][0]["evidence_type"] = "owner_record"
+    boundary["evidence_references"][0]["observed_at"] = "0001-01-01T00:00:00Z"
+    boundary["evidence_references"][1]["evidence_type"] = "fresh_verifier_receipt"
+    boundary["evidence_references"][1]["observed_at"] = "0001-01-01T00:00:00Z"
+    schema_errors, semantic_error_list = validate_document(boundary)
+    assert schema_errors == []
+    assert any("expired" in error for error in semantic_error_list)
+
+    boundary_path = tmp_path / "boundary-window.json"
+    valid_path = tmp_path / "valid.json"
+    boundary_path.write_text(json.dumps(boundary))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_governance_memory.py", str(boundary_path), str(valid_path)],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {boundary_path}" in captured
+    assert f"PASS {valid_path}" in captured
+
+
 def test_assertion_freshness_rejects_unbounded_ages_without_aborting_batch(
     tmp_path,
     monkeypatch,

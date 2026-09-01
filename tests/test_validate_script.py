@@ -1136,3 +1136,17 @@ def test_main_all_examples_uses_json_and_yaml_globs(tmp_path, monkeypatch, capsy
     assert "PASS dispatch-example.json" in captured.out
     assert "PASS seed-minimal.yaml" in captured.out
     assert "2 passed, 0 failed" in captured.out
+
+
+def test_main_all_examples_preserves_explicit_checkout_identity(monkeypatch, capsys):
+    exit_code, captured = run_main(
+        monkeypatch,
+        capsys,
+        "--all-examples",
+        "--actual-repository",
+        "organvm/unrelated-checkout",
+    )
+
+    assert exit_code == 1
+    assert "FAIL project-record-v1-example.yaml" in captured.out
+    assert "must match actual_repository" in captured.out

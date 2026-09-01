@@ -1015,7 +1015,11 @@ def main():
         ):
             repository_root = PROJECT_RECORD_FIXTURE_ROOT
         target_actual_repository = args.actual_repository
-        if args.all_examples and filepath.resolve() == PROJECT_RECORD_EXAMPLE.resolve():
+        if (
+            args.actual_repository is None
+            and args.all_examples
+            and filepath.resolve() == PROJECT_RECORD_EXAMPLE.resolve()
+        ):
             bundled_project = load_data(filepath)
             declared_repository = bundled_project.get("canonical_repository")
             if isinstance(declared_repository, str):
