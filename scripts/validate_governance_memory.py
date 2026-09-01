@@ -45,6 +45,8 @@ CONTRACT_TO_SCHEMA = {
     "coverage-receipt.v1": "coverage-receipt.v1.schema.json",
 }
 
+MAX_FRESHNESS_AGE_SECONDS = 315_576_000
+
 SOURCE_STATUSES = (
     "acquired",
     "parsed",
@@ -654,12 +656,25 @@ def _assertion_errors(
                 and isinstance(max_age_seconds, int)
                 and not isinstance(max_age_seconds, bool)
                 and max_age_seconds > 0
-                and parsed_verified_at + timedelta(seconds=max_age_seconds)
-                < validation_now
             ):
-                errors.append(
-                    "freshness.status 'fresh' is expired at validation time"
-                )
+                if max_age_seconds > MAX_FRESHNESS_AGE_SECONDS:
+                    errors.append(
+                        "freshness.max_age_seconds exceeds the ten-year validation bound"
+                    )
+                else:
+                    try:
+                        expires_at = parsed_verified_at + timedelta(
+                            seconds=max_age_seconds
+                        )
+                    except OverflowError:
+                        errors.append(
+                            "freshness.max_age_seconds cannot be represented safely"
+                        )
+                    else:
+                        if expires_at < validation_now:
+                            errors.append(
+                                "freshness.status 'fresh' is expired at validation time"
+                            )
 
     if data.get("verification_state") != "verified":
         return errors

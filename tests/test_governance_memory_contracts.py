@@ -5,12 +5,14 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 import rfc8785
 from jsonschema import Draft202012Validator, FormatChecker
 
+from scripts import validate_governance_memory as governance_validator
 from scripts.validate_governance_memory import (
     CONTRACT_TO_SCHEMA,
     semantic_errors,
@@ -341,6 +343,39 @@ def test_assertion_freshness_accepts_lowercase_utc_suffix():
         data,
         now=datetime(2026, 8, 31, 13, 0, tzinfo=UTC),
     ) == []
+
+
+def test_assertion_freshness_rejects_unbounded_ages_without_aborting_batch(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    huge = load(EXAMPLES_DIR / "assertion-evidence-v1-example.json")
+    huge["freshness"] = {
+        "verified_at": "2026-08-31T10:00:00Z",
+        "max_age_seconds": 10**100,
+        "status": "fresh",
+    }
+    schema_errors, semantic_error_list = validate_document(huge)
+    assert any("greater than the maximum" in error for error in schema_errors)
+    assert any("ten-year validation bound" in error for error in semantic_error_list)
+
+    huge_path = tmp_path / "huge.json"
+    valid_path = tmp_path / "valid.json"
+    huge_path.write_text(json.dumps(huge))
+    valid_path.write_text(
+        (EXAMPLES_DIR / "assertion-evidence-v1-example.json").read_text()
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["validate_governance_memory.py", str(huge_path), str(valid_path)],
+    )
+
+    assert governance_validator.main() == 1
+    captured = capsys.readouterr().out
+    assert f"FAIL {huge_path}" in captured
+    assert f"PASS {valid_path}" in captured
 
 
 def test_ratified_operator_directive_accepts_event_bound_freshness():

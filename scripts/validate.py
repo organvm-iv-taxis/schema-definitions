@@ -9,9 +9,13 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
+import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     import jsonschema
@@ -26,11 +30,25 @@ except ImportError:
 
 if __package__:
     from .schema_formats import FORMAT_CHECKER
+    from .validate_governance_memory import (
+        validate_document as validate_governance_document,
+    )
 else:
     from schema_formats import FORMAT_CHECKER
+    from validate_governance_memory import (
+        validate_document as validate_governance_document,
+    )
 
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
+PROJECT_RECORD_EXAMPLE = EXAMPLES_DIR / "project-record-v1-example.yaml"
+PROJECT_RECORD_FIXTURE_ROOT = EXAMPLES_DIR / "project-record-v1-fixture"
+_REPOSITORY_SLUG = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_DEPLOYMENT_POSTURES = {
+    "pilot": frozenset({"implemented", "partial"}),
+    "public": frozenset({"implemented", "partial"}),
+    "retired": frozenset({"implemented", "partial", "contradicted"}),
+}
 
 # Map file name patterns to schemas
 SCHEMA_MAP = {
@@ -120,13 +138,153 @@ def _duplicate_strings(values: list[str]) -> list[str]:
     return sorted(duplicates)
 
 
-def project_record_semantic_errors(data: object) -> list[str]:
+def _github_repository_slug(value: object) -> str | None:
+    """Return owner/name for one canonical GitHub repository URL."""
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "github.com"
+        or parsed.netloc != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) != 2:
+        return None
+    owner, name = parts
+    name = name.removesuffix(".git")
+    repository = f"{owner}/{name}"
+    return repository if _REPOSITORY_SLUG.fullmatch(repository) else None
+
+
+def _contained_file(root: Path, reference: str) -> Path | None:
+    """Resolve a repository-relative file without permitting root escape."""
+    try:
+        candidate = (root / reference).resolve()
+        candidate.relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _load_mapping(path: Path) -> Mapping[str, object]:
+    """Load one JSON/YAML mapping without terminating the validation batch."""
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        if yaml is None:
+            raise ValueError("pyyaml is required to load YAML assertions")
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"invalid YAML: {exc}") from exc
+    else:
+        data = json.loads(text)
+    if not isinstance(data, dict):
+        raise TypeError("document is not a mapping")
+    return data
+
+
+def _assertion_target(
+    *,
+    root: Path,
+    reference: str,
+    assertion_id: str,
+    label: str,
+) -> tuple[Mapping[str, object] | None, list[str]]:
+    """Load, validate, and byte-bind one local assertion target."""
+    candidate = _contained_file(root, reference)
+    if candidate is None:
+        return None, [f"  {label} assertion path does not exist or escapes root: {reference}"]
+    try:
+        assertion = _load_mapping(candidate)
+    except (OSError, TypeError, UnicodeError, ValueError) as exc:
+        return None, [f"  {label} cannot load assertion {reference}: {exc}"]
+
+    errors: list[str] = []
+    contract_matches = assertion.get("contract_name") == "assertion-evidence.v1"
+    id_matches = assertion.get("assertion_id") == assertion_id
+    if not contract_matches:
+        errors.append(f"  {label} target is not assertion-evidence.v1: {reference}")
+    if not id_matches:
+        errors.append(f"  {label} assertion_id does not match {reference}")
+
+    if contract_matches:
+        schema_errors, semantic_errors = validate_governance_document(assertion)
+        errors.extend(
+            f"  assertion {reference}: schema: {error}" for error in schema_errors
+        )
+        errors.extend(
+            f"  assertion {reference}: semantic: {error}"
+            for error in semantic_errors
+        )
+
+        evidence = assertion.get("evidence_references")
+        if isinstance(evidence, list):
+            for index, item in enumerate(evidence):
+                if not isinstance(item, Mapping):
+                    continue
+                evidence_reference = item.get("reference")
+                body_hash = item.get("body_hash")
+                evidence_label = (
+                    f"assertion {reference} evidence_references[{index}]"
+                )
+                if not isinstance(evidence_reference, str):
+                    continue
+                evidence_path = _contained_file(root, evidence_reference)
+                if evidence_path is None:
+                    errors.append(
+                        f"  {evidence_label} path does not exist or escapes root: "
+                        f"{evidence_reference}"
+                    )
+                    continue
+                try:
+                    evidence_bytes = evidence_path.read_bytes()
+                except OSError as exc:
+                    errors.append(f"  {evidence_label} cannot read bytes: {exc}")
+                    continue
+                digest = "sha256:" + hashlib.sha256(evidence_bytes).hexdigest()
+                if body_hash != digest:
+                    errors.append(
+                        f"  {evidence_label} body_hash does not match raw bytes"
+                    )
+
+    if not contract_matches or not id_matches:
+        return None, errors
+    return assertion, errors
+
+
+def _validate_local_file(
+    root: Path,
+    reference: object,
+    label: str,
+    errors: list[str],
+) -> None:
+    if isinstance(reference, str) and _contained_file(root, reference) is None:
+        errors.append(f"  {label} does not exist or escapes root: {reference}")
+
+
+def project_record_semantic_errors(
+    data: object,
+    *,
+    repository_root: str | Path | None = None,
+    actual_repository: str | None = None,
+) -> list[str]:
     """Validate project-record invariants JSON Schema cannot express."""
     if not isinstance(data, dict):
         return []
     routes = data.get("audience_routes")
     if not isinstance(routes, list):
-        return []
+        routes = []
 
     modes = [
         route["mode"]
@@ -152,10 +310,159 @@ def project_record_semantic_errors(data: object) -> list[str]:
             "  audience_routes: duplicate path values: "
             + ", ".join(duplicate_paths)
         )
+
+    claims = data.get("claim_references")
+    if not isinstance(claims, list):
+        claims = []
+    claim_ids = [
+        claim["id"]
+        for claim in claims
+        if isinstance(claim, dict) and isinstance(claim.get("id"), str)
+    ]
+    duplicate_claim_ids = _duplicate_strings(claim_ids)
+    if duplicate_claim_ids:
+        errors.append(
+            "  claim_references: duplicate id values: "
+            + ", ".join(duplicate_claim_ids)
+        )
+
+    documentation_class = data.get("documentation_class")
+    repository_role = data.get("repository_role")
+    canonical_repository = data.get("canonical_repository")
+    class_d_delivery = documentation_class == "D" or repository_role in {
+        "mirror",
+        "deployment-artifact",
+    }
+    if class_d_delivery:
+        redirect = data.get("redirect")
+        target = redirect.get("target") if isinstance(redirect, dict) else None
+        target_repository = _github_repository_slug(target)
+        if target_repository is None:
+            errors.append(
+                "  class D redirect.target must be a canonical HTTPS GitHub repository URL"
+            )
+        elif (
+            isinstance(canonical_repository, str)
+            and target_repository.casefold() != canonical_repository.casefold()
+        ):
+            errors.append(
+                "  class D redirect.target must resolve to canonical_repository"
+            )
+        if actual_repository is None:
+            errors.append(
+                "  class D validation requires actual_repository owner/name context"
+            )
+        elif _REPOSITORY_SLUG.fullmatch(actual_repository) is None:
+            errors.append("  actual_repository must use owner/name form")
+        elif (
+            isinstance(canonical_repository, str)
+            and canonical_repository.casefold() == actual_repository.casefold()
+        ):
+            errors.append(
+                "  class D canonical_repository must differ from actual_repository"
+            )
+
+    root: Path | None = None
+    if repository_root is not None:
+        root = Path(repository_root).resolve()
+        if not root.is_dir():
+            errors.append(f"  repository_root is not a directory: {root}")
+            root = None
+
+    resolved_assertions: dict[int, Mapping[str, object]] = {}
+    if root is not None:
+        for index, route in enumerate(routes):
+            if isinstance(route, dict):
+                _validate_local_file(
+                    root,
+                    route.get("path"),
+                    f"audience_routes[{index}].path",
+                    errors,
+                )
+
+        links = data.get("links")
+        if isinstance(links, dict):
+            for key in ("documentation", "evidence"):
+                reference = links.get(key)
+                if isinstance(reference, str) and _github_repository_slug(reference) is None:
+                    try:
+                        is_remote = bool(urlsplit(reference).scheme)
+                    except ValueError:
+                        is_remote = True
+                    if not is_remote:
+                        _validate_local_file(root, reference, f"links.{key}", errors)
+
+        for index, claim in enumerate(claims):
+            if not isinstance(claim, dict):
+                continue
+            reference = claim.get("assertion_ref")
+            assertion_id = claim.get("assertion_id")
+            if not isinstance(reference, str) or not isinstance(assertion_id, str):
+                continue
+            assertion, assertion_errors = _assertion_target(
+                root=root,
+                reference=reference,
+                assertion_id=assertion_id,
+                label=f"claim_references[{index}]",
+            )
+            errors.extend(assertion_errors)
+            if assertion is not None:
+                resolved_assertions[index] = assertion
+
+        limitations = data.get("limitations")
+        if isinstance(limitations, list):
+            for index, limitation in enumerate(limitations):
+                if not isinstance(limitation, dict):
+                    continue
+                reference = limitation.get("assertion_ref")
+                assertion_id = limitation.get("assertion_id")
+                if not isinstance(reference, str) or not isinstance(assertion_id, str):
+                    continue
+                _assertion, assertion_errors = _assertion_target(
+                    root=root,
+                    reference=reference,
+                    assertion_id=assertion_id,
+                    label=f"limitations[{index}]",
+                )
+                errors.extend(assertion_errors)
+
+    deployment_status = data.get("deployment_status")
+    allowed_postures = (
+        _DEPLOYMENT_POSTURES.get(deployment_status)
+        if isinstance(deployment_status, str)
+        else None
+    )
+    if allowed_postures is not None:
+        qualifying = [
+            index
+            for index, claim in enumerate(claims)
+            if isinstance(claim, dict)
+            and claim.get("scope") == "deployment"
+            and claim.get("claim_posture") in allowed_postures
+        ]
+        if root is None:
+            errors.append(
+                f"  deployment_status {deployment_status!r} requires repository_root "
+                "to verify assertion evidence"
+            )
+        elif not any(
+            resolved_assertions.get(index, {}).get("verification_state") == "verified"
+            for index in qualifying
+        ):
+            errors.append(
+                f"  deployment_status {deployment_status!r} requires at least one "
+                "qualifying deployment claim that resolves to a verified assertion"
+            )
     return errors
 
 
-def validate_file(filepath: Path, schema_path: Path | None = None) -> tuple[bool, list[str]]:
+def validate_file(
+    filepath: Path,
+    schema_path: Path | None = None,
+    *,
+    repository_root: str | Path | None = None,
+    actual_repository: str | None = None,
+) -> tuple[bool, list[str]]:
     """Validate a file against a JSON Schema. Returns (pass, errors)."""
     if schema_path is None:
         schema_path = detect_schema(filepath)
@@ -178,7 +485,13 @@ def validate_file(filepath: Path, schema_path: Path | None = None) -> tuple[bool
         messages.append(f"  {path}: {err.message}")
 
     if schema_path.name == "project-record-v1.schema.json":
-        messages.extend(project_record_semantic_errors(data))
+        messages.extend(
+            project_record_semantic_errors(
+                data,
+                repository_root=repository_root,
+                actual_repository=actual_repository,
+            )
+        )
 
     return len(messages) == 0, messages
 
@@ -194,6 +507,17 @@ def main():
         "--ignore-missing",
         action="store_true",
         help="Skip missing explicit paths instead of failing validation",
+    )
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        default=None,
+        help="Repository root for strict local project-record integrity checks",
+    )
+    parser.add_argument(
+        "--actual-repository",
+        default=None,
+        help="Checked-out GitHub owner/name for canonical redirect identity checks",
     )
     args = parser.parse_args()
 
@@ -220,7 +544,18 @@ def main():
                 total_fail += 1
             continue
 
-        ok, errors = validate_file(filepath, schema_override)
+        repository_root = args.repository_root
+        if (
+            repository_root is None
+            and filepath.resolve() == PROJECT_RECORD_EXAMPLE.resolve()
+        ):
+            repository_root = PROJECT_RECORD_FIXTURE_ROOT
+        ok, errors = validate_file(
+            filepath,
+            schema_override,
+            repository_root=repository_root,
+            actual_repository=args.actual_repository,
+        )
         status = "PASS" if ok else "FAIL"
         print(f"{status} {filepath.name}")
 

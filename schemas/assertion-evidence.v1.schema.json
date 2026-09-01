@@ -24,7 +24,12 @@
       "required": ["verified_at", "status"],
       "properties": {
         "verified_at": {"type": "string", "format": "date-time"},
-        "max_age_seconds": {"type": "integer", "minimum": 1},
+        "max_age_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 315576000,
+          "description": "Maximum freshness window in seconds, bounded to ten Julian years."
+        },
         "status": {"type": "string", "enum": ["fresh", "stale", "not_applicable"]}
       },
       "allOf": [

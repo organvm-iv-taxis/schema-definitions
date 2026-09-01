@@ -23,7 +23,7 @@ jobs:
       - name: Type check with pyright
         run: pyright scripts/
       - run: pytest tests/ -v
-      - run: python scripts/validate.py --all-examples
+      - run: python scripts/validate.py --all-examples --actual-repository "${{ github.repository }}"
       - name: Build and smoke-test installed wheel
         shell: bash
         run: |
@@ -34,5 +34,5 @@ jobs:
           "$smoke/venv/bin/pip" install --no-deps dist/*.whl
           (
             cd "$smoke"
-            "$smoke/venv/bin/organvm-validate" --all-examples
+            "$smoke/venv/bin/organvm-validate" --all-examples --actual-repository "${{ github.repository }}"
           )

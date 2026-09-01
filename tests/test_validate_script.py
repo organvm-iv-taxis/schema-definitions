@@ -1,6 +1,7 @@
 """Tests for the schema validation helper script."""
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from scripts import validate as validate_script
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = ROOT / "schemas"
+PROJECT_RECORD_EXAMPLE = validate_script.EXAMPLES_DIR / "project-record-v1-example.yaml"
+PROJECT_RECORD_FIXTURE = validate_script.EXAMPLES_DIR / "project-record-v1-fixture"
 
 
 def run_main(monkeypatch, capsys, *args):
@@ -147,6 +150,146 @@ def test_project_record_semantics_reject_duplicate_route_modes_and_paths(tmp_pat
 
         assert ok is False
         assert any(expected in error for error in errors)
+
+
+def test_project_record_semantics_reject_duplicate_claim_ids(tmp_path):
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    baseline["claim_references"][1]["id"] = baseline["claim_references"][0]["id"]
+    target = tmp_path / "project-record-duplicate-claim.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(target)
+
+    assert ok is False
+    assert any("duplicate id values: project-status" in error for error in errors)
+
+
+def test_strict_project_record_example_binds_nested_fixture_bytes():
+    ok, errors = validate_script.validate_file(
+        PROJECT_RECORD_EXAMPLE,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+
+    assert ok is True
+    assert errors == []
+
+
+def test_lifecycle_state_requires_a_bound_verified_assertion(tmp_path):
+    repository_root = tmp_path / "repository"
+    shutil.copytree(PROJECT_RECORD_FIXTURE, repository_root)
+    baseline = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    deployment_claim = json.loads(json.dumps(baseline["claim_references"][0]))
+    deployment_claim.update(
+        {
+            "id": "deployment-lifecycle",
+            "scope": "deployment",
+            "claim_posture": "implemented",
+        }
+    )
+    baseline["claim_references"].append(deployment_claim)
+    baseline["deployment_status"] = "public"
+    target = tmp_path / "project-record-public.json"
+    target.write_text(json.dumps(baseline))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is True
+    assert errors == []
+
+    missing = json.loads(json.dumps(baseline))
+    missing["claim_references"][-1]["assertion_ref"] = (
+        "docs/evidence/claims/missing.json"
+    )
+    target.write_text(json.dumps(missing))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("assertion path does not exist" in error for error in errors)
+    assert any("resolves to a verified assertion" in error for error in errors)
+
+    assertion_path = repository_root / "docs/evidence/claims/status.json"
+    assertion = json.loads(assertion_path.read_text())
+    assertion["verification_state"] = "unverified"
+    assertion_path.write_text(json.dumps(assertion))
+    target.write_text(json.dumps(baseline))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("resolves to a verified assertion" in error for error in errors)
+
+    assertion["verification_state"] = "verified"
+    assertion["assertion_id"] = "different-assertion"
+    assertion_path.write_text(json.dumps(assertion))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("assertion_id does not match" in error for error in errors)
+
+    assertion["assertion_id"] = deployment_claim["assertion_id"]
+    assertion["contract_name"] = "different-contract.v1"
+    assertion_path.write_text(json.dumps(assertion))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=repository_root,
+    )
+    assert ok is False
+    assert any("target is not assertion-evidence.v1" in error for error in errors)
+
+
+def test_class_d_redirect_binds_canonical_and_actual_repository(tmp_path):
+    record = validate_script.load_data(PROJECT_RECORD_EXAMPLE)
+    record["documentation_class"] = "D"
+    record["repository_role"] = "deployment-artifact"
+    record["audience_routes"] = []
+    record["redirect"] = {
+        "status": "active",
+        "target": "https://github.com/organvm/example-project",
+    }
+    target = tmp_path / "project-record-deployment.json"
+    target.write_text(json.dumps(record))
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+        actual_repository="organvm/example-deployment",
+    )
+    assert ok is True
+    assert errors == []
+
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+        actual_repository="organvm/example-project",
+    )
+    assert ok is False
+    assert any("must differ from actual_repository" in error for error in errors)
+
+    record["redirect"]["target"] = "https://github.com/organvm/wrong-upstream"
+    target.write_text(json.dumps(record))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+        actual_repository="organvm/example-deployment",
+    )
+    assert ok is False
+    assert any("must resolve to canonical_repository" in error for error in errors)
+
+    record["redirect"]["target"] = "https://github.com/organvm/example-project"
+    target.write_text(json.dumps(record))
+    ok, errors = validate_script.validate_file(
+        target,
+        repository_root=PROJECT_RECORD_FIXTURE,
+    )
+    assert ok is False
+    assert any("requires actual_repository" in error for error in errors)
 
 
 def test_malformed_project_uri_does_not_abort_later_batch_targets(

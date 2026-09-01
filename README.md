@@ -87,6 +87,12 @@ python scripts/validate.py path/to/registry-v2.json
 # Validate all examples
 python scripts/validate.py --all-examples
 
+# Strictly bind a project record to its local assertions/evidence and to the
+# checked-out GitHub identity (required for Class D delivery surfaces)
+python scripts/validate.py project-record.yml \
+  --repository-root . \
+  --actual-repository "$GITHUB_REPOSITORY"
+
 # Validate governance-memory shape and cross-field invariants
 python scripts/validate_governance_memory.py \
   examples/{owner-reference,parameter-contract,source-envelope,assertion-evidence,lineage-graph,governance-testament,node-self-image,coverage-receipt}-v1-example.json

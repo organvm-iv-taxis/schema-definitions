@@ -32,7 +32,15 @@ namespaces = true
 
 [tool.setuptools.package-data]
 schemas = ["*.json"]
-examples = ["*.json", "*.yaml", "*.yml"]
+examples = [
+    "*.json",
+    "*.yaml",
+    "*.yml",
+    "project-record-v1-fixture/docs/audiences/*.md",
+    "project-record-v1-fixture/docs/evidence/*.md",
+    "project-record-v1-fixture/docs/evidence/claims/*.json",
+    "project-record-v1-fixture/docs/evidence/sources/*.txt",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
