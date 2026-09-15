@@ -64,6 +64,20 @@ def test_digest_patterns_reject_final_newlines_across_contracts():
 
 
 class TestRegistrySchema:
+    def test_hosting_owner_is_independent_of_logical_organ(self):
+        schema = load_schema("registry-v2.schema.json")
+        data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
+        organ = next(iter(data["organs"].values()))
+        repo = organ["repositories"][0]
+        for owner in ("organvm", "4444J99", "organvm-v-logos", "meta-organvm"):
+            repo["org"] = owner
+            assert validate(data, schema) == [], owner
+
+    def test_hosting_owner_rejects_paths_and_malformed_names(self):
+        definition = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]["org"]
+        for owner in ("", "../organvm", "owner/repo", "-owner", "owner-", "owner--name", "owner\n", "a" * 40):
+            assert validate(owner, definition), repr(owner)
+
     def test_example_validates(self):
         schema = load_schema("registry-v2.schema.json")
         with open(EXAMPLES_DIR / "registry-minimal.json") as f:

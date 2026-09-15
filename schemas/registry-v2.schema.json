@@ -85,7 +85,10 @@
         },
         "org": {
           "type": "string",
-          "pattern": "^(organvm-[ivx]+-[a-z]+|meta-organvm)$(?![\\s\\S])"
+          "description": "Current GitHub hosting owner; organ membership is the enclosing organs key, not this account name.",
+          "minLength": 1,
+          "maxLength": 39,
+          "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$(?![\\s\\S])"
         },
         "status": { "type": "string" },
         "updated": {

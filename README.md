@@ -139,3 +139,12 @@ Some pre-existing schemas retain `$id` values under the historical
 `meta-organvm.github.io` namespace. Those identifiers remain stable for
 compatibility; they are schema identifiers, not a statement of current GitHub
 ownership. New contracts use the current canonical authority namespace.
+
+### Registry hosting identity
+
+A repository's `org` is its current GitHub hosting owner. The enclosing `organs`
+key retains its logical ORGANVM membership. A hosting transfer does not, by
+itself, move a repository between organs. Bind a correction to the same stable
+GitHub repository ID through authenticated reads of both old and current paths;
+a same-name match alone is insufficient. The schema validates account-name
+shape, not account existence or transfer authority.
