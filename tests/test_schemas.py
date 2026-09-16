@@ -64,6 +64,15 @@ def test_digest_patterns_reject_final_newlines_across_contracts():
 
 
 class TestRegistrySchema:
+    def test_workflow_contract_accepts_custom_basenames(self):
+        field = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]["ci_workflow"]
+        for value in (None, "ci.yml", "quality.yml", "python-package.yml", "ci-pipeline.yml",
+                      "ci-python.yml", "test_suite.yaml"):
+            assert validate(value, field) == [], value
+        for value in ("", False, 0, [], {}, "../ci.yml", "/ci.yml", "sub/ci.yml",
+                      ".github/workflows/ci.yml", "ci.yml\n", "ci.yml@main", "ci.txt"):
+            assert validate(value, field), repr(value)
+
     def test_optional_revenue_fields_preserve_unknown(self):
         schema = load_schema("registry-v2.schema.json")
         data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())

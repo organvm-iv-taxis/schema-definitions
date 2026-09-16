@@ -128,7 +128,8 @@
         },
         "ci_workflow": {
           "type": ["string", "null"],
-          "enum": ["ci-python.yml", "ci-typescript.yml", "ci-mixed.yml", "ci-minimal.yml", null]
+          "description": "Registered YAML workflow basename within .github/workflows; null means unknown or unregistered. Naming a workflow does not prove execution or health.",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*\\.ya?ml$(?![\\s\\S])"
         },
         "platinum_status": { "type": "boolean" },
         "promotion_obligations": {
