@@ -65,7 +65,13 @@
         "completion": { "type": "string" },
         "public_visibility": {
           "type": "string",
-          "enum": ["PUBLIC", "PRIVATE", "MIXED"]
+          "description": "Declared organ visibility policy, not measured repository visibility or publication consent. Preserve FULLY PUBLIC, MOSTLY PUBLIC and SEMI-PUBLIC distinctions; explanatory captions belong in public_visibility_note.",
+          "enum": ["PUBLIC", "PRIVATE", "MIXED", "FULLY PUBLIC", "MOSTLY PUBLIC", "SEMI-PUBLIC"]
+        },
+        "public_visibility_note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Preserved qualifier or historical caption for the declared visibility policy. Counts in this text are historical statements, not a live inventory measurement."
         },
         "portfolio_angle": { "type": "string" },
         "repository_count": { "type": "integer", "minimum": 0 },

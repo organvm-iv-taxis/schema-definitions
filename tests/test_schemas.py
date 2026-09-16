@@ -64,6 +64,18 @@ def test_digest_patterns_reject_final_newlines_across_contracts():
 
 
 class TestRegistrySchema:
+    def test_visibility_policy_preserves_documented_distinctions(self):
+        schema = load_schema("registry-v2.schema.json")
+        data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
+        organ = next(iter(data["organs"].values()))
+        for value in ("PUBLIC", "PRIVATE", "MIXED", "FULLY PUBLIC", "MOSTLY PUBLIC", "SEMI-PUBLIC"):
+            organ["public_visibility"] = value
+            organ["public_visibility_note"] = "Historical qualifier; not current inventory evidence"
+            assert validate(data, schema) == [], value
+        for value in ("UNKNOWN", "MIXED (historical count)", False, None):
+            organ["public_visibility"] = value
+            assert validate(data, schema), repr(value)
+
     def test_workflow_contract_accepts_custom_basenames(self):
         field = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]["ci_workflow"]
         for value in (None, "ci.yml", "quality.yml", "python-package.yml", "ci-pipeline.yml",
