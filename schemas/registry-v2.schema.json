@@ -137,12 +137,14 @@
         },
         "type": { "type": "string" },
         "revenue_model": {
-          "type": "string",
-          "enum": ["subscription", "freemium", "one-time", "advertising", "marketplace", "internal", "none"]
+          "type": ["string", "null"],
+          "description": "Null means unassessed; none is an explicit absence of a revenue model.",
+          "enum": ["subscription", "freemium", "one-time", "advertising", "marketplace", "internal", "none", null]
         },
         "revenue_status": {
-          "type": "string",
-          "enum": ["pre-launch", "beta", "live", "deprecated", "n/a"]
+          "type": ["string", "null"],
+          "description": "Null means unassessed; n/a is an explicit non-applicability decision.",
+          "enum": ["pre-launch", "beta", "live", "deprecated", "n/a", null]
         },
         "functional_class": {
           "type": "string",

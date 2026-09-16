@@ -64,6 +64,20 @@ def test_digest_patterns_reject_final_newlines_across_contracts():
 
 
 class TestRegistrySchema:
+    def test_optional_revenue_fields_preserve_unknown(self):
+        schema = load_schema("registry-v2.schema.json")
+        data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
+        repo = next(iter(data["organs"].values()))["repositories"][0]
+        for model, status in ((None, None), ("none", "n/a"), ("subscription", "live")):
+            repo.update(revenue_model=model, revenue_status=status)
+            assert validate(data, schema) == []
+
+    def test_revenue_unknown_does_not_allow_arbitrary_values(self):
+        properties = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]
+        for field in ("revenue_model", "revenue_status"):
+            for value in ("", "unknown", False, 0, [], {}):
+                assert validate(value, properties[field]), (field, value)
+
     def test_hosting_owner_is_independent_of_logical_organ(self):
         schema = load_schema("registry-v2.schema.json")
         data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
