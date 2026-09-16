@@ -64,6 +64,55 @@ def test_digest_patterns_reject_final_newlines_across_contracts():
 
 
 class TestRegistrySchema:
+    def test_visibility_policy_preserves_documented_distinctions(self):
+        schema = load_schema("registry-v2.schema.json")
+        data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
+        organ = next(iter(data["organs"].values()))
+        for value in ("PUBLIC", "PRIVATE", "MIXED", "FULLY PUBLIC", "MOSTLY PUBLIC", "SEMI-PUBLIC"):
+            organ["public_visibility"] = value
+            organ["public_visibility_note"] = "Historical qualifier; not current inventory evidence"
+            assert validate(data, schema) == [], value
+        for value in ("UNKNOWN", "MIXED (historical count)", False, None):
+            organ["public_visibility"] = value
+            assert validate(data, schema), repr(value)
+
+    def test_workflow_contract_accepts_custom_basenames(self):
+        field = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]["ci_workflow"]
+        for value in (None, "ci.yml", "quality.yml", "python-package.yml", "ci-pipeline.yml",
+                      "ci-python.yml", "test_suite.yaml"):
+            assert validate(value, field) == [], value
+        for value in ("", False, 0, [], {}, "../ci.yml", "/ci.yml", "sub/ci.yml",
+                      ".github/workflows/ci.yml", "ci.yml\n", "ci.yml@main", "ci.txt"):
+            assert validate(value, field), repr(value)
+
+    def test_optional_revenue_fields_preserve_unknown(self):
+        schema = load_schema("registry-v2.schema.json")
+        data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
+        repo = next(iter(data["organs"].values()))["repositories"][0]
+        for model, status in ((None, None), ("none", "n/a"), ("subscription", "live")):
+            repo.update(revenue_model=model, revenue_status=status)
+            assert validate(data, schema) == []
+
+    def test_revenue_unknown_does_not_allow_arbitrary_values(self):
+        properties = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]
+        for field in ("revenue_model", "revenue_status"):
+            for value in ("", "unknown", False, 0, [], {}):
+                assert validate(value, properties[field]), (field, value)
+
+    def test_hosting_owner_is_independent_of_logical_organ(self):
+        schema = load_schema("registry-v2.schema.json")
+        data = json.loads((EXAMPLES_DIR / "registry-minimal.json").read_text())
+        organ = next(iter(data["organs"].values()))
+        repo = organ["repositories"][0]
+        for owner in ("organvm", "4444J99", "organvm-v-logos", "meta-organvm"):
+            repo["org"] = owner
+            assert validate(data, schema) == [], owner
+
+    def test_hosting_owner_rejects_paths_and_malformed_names(self):
+        definition = load_schema("registry-v2.schema.json")["$defs"]["repository"]["properties"]["org"]
+        for owner in ("", "../organvm", "owner/repo", "-owner", "owner-", "owner--name", "owner\n", "a" * 40):
+            assert validate(owner, definition), repr(owner)
+
     def test_example_validates(self):
         schema = load_schema("registry-v2.schema.json")
         with open(EXAMPLES_DIR / "registry-minimal.json") as f:

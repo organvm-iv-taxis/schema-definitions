@@ -65,7 +65,13 @@
         "completion": { "type": "string" },
         "public_visibility": {
           "type": "string",
-          "enum": ["PUBLIC", "PRIVATE", "MIXED"]
+          "description": "Declared organ visibility policy, not measured repository visibility or publication consent. Preserve FULLY PUBLIC, MOSTLY PUBLIC and SEMI-PUBLIC distinctions; explanatory captions belong in public_visibility_note.",
+          "enum": ["PUBLIC", "PRIVATE", "MIXED", "FULLY PUBLIC", "MOSTLY PUBLIC", "SEMI-PUBLIC"]
+        },
+        "public_visibility_note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Preserved qualifier or historical caption for the declared visibility policy. Counts in this text are historical statements, not a live inventory measurement."
         },
         "portfolio_angle": { "type": "string" },
         "repository_count": { "type": "integer", "minimum": 0 },
@@ -85,7 +91,10 @@
         },
         "org": {
           "type": "string",
-          "pattern": "^(organvm-[ivx]+-[a-z]+|meta-organvm)$(?![\\s\\S])"
+          "description": "Current GitHub hosting owner; organ membership is the enclosing organs key, not this account name.",
+          "minLength": 1,
+          "maxLength": 39,
+          "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$(?![\\s\\S])"
         },
         "status": { "type": "string" },
         "updated": {
@@ -125,7 +134,8 @@
         },
         "ci_workflow": {
           "type": ["string", "null"],
-          "enum": ["ci-python.yml", "ci-typescript.yml", "ci-mixed.yml", "ci-minimal.yml", null]
+          "description": "Registered YAML workflow basename within .github/workflows; null means unknown or unregistered. Naming a workflow does not prove execution or health.",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*\\.ya?ml$(?![\\s\\S])"
         },
         "platinum_status": { "type": "boolean" },
         "promotion_obligations": {
@@ -134,12 +144,14 @@
         },
         "type": { "type": "string" },
         "revenue_model": {
-          "type": "string",
-          "enum": ["subscription", "freemium", "one-time", "advertising", "marketplace", "internal", "none"]
+          "type": ["string", "null"],
+          "description": "Null means unassessed; none is an explicit absence of a revenue model.",
+          "enum": ["subscription", "freemium", "one-time", "advertising", "marketplace", "internal", "none", null]
         },
         "revenue_status": {
-          "type": "string",
-          "enum": ["pre-launch", "beta", "live", "deprecated", "n/a"]
+          "type": ["string", "null"],
+          "description": "Null means unassessed; n/a is an explicit non-applicability decision.",
+          "enum": ["pre-launch", "beta", "live", "deprecated", "n/a", null]
         },
         "functional_class": {
           "type": "string",
